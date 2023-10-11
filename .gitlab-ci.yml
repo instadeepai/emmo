@@ -1,0 +1,37 @@
+stages:
+  - build
+  - tests
+  - code-quality
+
+variables:
+  DOCKER_IMAGE_NAME_LINT: $CI_REGISTRY_IMAGE/lint
+  DOCKER_IMAGE_LINT: $DOCKER_IMAGE_NAME_LINT:$CI_COMMIT_SHA
+  DOCKER_IMAGE_PREVIOUS_LINT: $DOCKER_IMAGE_NAME_LINT:$CI_COMMIT_BEFORE_SHA
+  DOCKER_IMAGE_LATEST_LINT: $DOCKER_IMAGE_NAME_LINT:latest
+
+.docker-login:
+  image: eu.gcr.io/int-infra-harborbackup-gcp/docker-hub/docker:19.03
+  services:
+    - eu.gcr.io/int-infra-harborbackup-gcp/docker-hub/docker:19.03-dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin
+      "$CI_REGISTRY"
+
+build-lint:
+  extends: .docker-login
+  stage: build
+  script:
+    - docker pull $DOCKER_IMAGE_PREVIOUS_LINT || docker pull $DOCKER_IMAGE_LATEST_LINT || true
+    - docker build --cache-from $DOCKER_IMAGE_PREVIOUS_LINT --cache-from $DOCKER_IMAGE_LATEST_LINT
+      -t $DOCKER_IMAGE_LINT . -f Dockerfile.lint
+    - docker push $DOCKER_IMAGE_LINT
+
+lint:
+  image: $DOCKER_IMAGE_LINT
+  stage: tests
+  needs: [build-lint]
+  script:
+    # This won't run the check on commit msg, we need to add one step
+    - pre-commit run --all-files
+    - echo $(git log -1 --pretty=%s --no-merges) > current_commit_msg
+    - pre-commit run --hook-stage commit-msg --commit-msg-filename current_commit_msg
