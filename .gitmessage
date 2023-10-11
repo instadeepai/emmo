@@ -1,0 +1,25 @@
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+# The <type> should be one of the following :
+# - `build`: Changes to our deployment configuration (e.g. docker, requirements)
+# - `ci` : Changes to our CI configuration files and scripts
+# - `docs` : Documentation changes
+# - `feat` : A new feature
+# - `fix` : A bug fix
+# - `perf` : A code change that improves performance
+# - `refactor` : A code change that neither fixes a bug nor adds a feature
+# - `style` : Changes that do not affect the meaning of the code (white-space, formatting, missing
+#     semi-colons, etc)
+# - `test` : Adding missing tests or correcting existing tests
+#
+# The <scope> is optional and it describes the module affected by the changes
+#
+# The <subject> is mandatory and it contains a succinct description of the change
+#
+# The <body> is optional and it is used to extend the <subject> if necessary
+#
+# The <footer> is optional and it can contain information about breaking changes and is also the place to reference GitLab issues, that this commit closes or is related to.
+#

@@ -1,0 +1,11 @@
+# By default ignore all the folders and add the relevant ones
+*
+
+# Requirements
+!requirements-linting.txt
+
+# Configuration to run lint job
+!.pre-commit-config.yaml
+
+# Source code
+!src/
