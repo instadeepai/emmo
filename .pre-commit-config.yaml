@@ -1,5 +1,6 @@
 default_language_version:
   python: python3.10
+  node: system
 
 default_stages: [commit]
 
@@ -117,6 +118,11 @@ repos:
       - id: codespell
         name: codespell
         description: Checks for common misspellings in text files.
-        entry: codespell --skip="*.js,*.json" --ignore-words=.codespell-ignore.txt
+        entry: codespell --skip="*.js,*.json,*.ipynb" --ignore-words=".codespell-ignore.txt"
         language: python
         types: [text]
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.6.1
+    hooks:
+      - id: nbstripout

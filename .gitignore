@@ -55,4 +55,8 @@ _minted*/
 *.pyg
 
 # Others
+validation/local
 *.DS_Store
+
+models/
+*.csv

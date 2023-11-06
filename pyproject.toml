@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emmo"
+description = "EM-based motif identification and pMHC binding prediction"
+requires-python = ">=3.10"
+authors = [{ name = "BioNTech SE, InstaDeep Ltd", email = "david.schaller@biontech.de"}]
+maintainers = [{ name = "BioNTech SE, InstaDeep Ltd", email = "david.schaller@biontech.de"}]
+dynamic = ["version", "readme"]
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "tensorflow >= 2.10",
+    "logomaker",
+    "click",
+]
+
+[project.urls]
+"Homepage" = "https://gitlab.com/instadeep/emmo"
+"Bug Tracker" = "https://gitlab.com/instadeep/emmo/-/issues"
+
+[project.scripts]
+emmo = "emmo.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["emmo*"]
+
+[tool.setuptools.dynamic]
+readme = { file = ["README.md"], content-type = "text/markdown" }
+version = { attr = "emmo.__version__" }
