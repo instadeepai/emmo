@@ -16,6 +16,9 @@ dependencies = [
     "tensorflow >= 2.10",
     "logomaker",
     "click",
+    "cloudpathlib[gs] >= 0.16.0",
+    "python-dotenv",
+    "pyyaml"
 ]
 
 [project.urls]

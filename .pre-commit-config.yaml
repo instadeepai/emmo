@@ -72,6 +72,9 @@ repos:
           - --strict-optional
           - --show-error-context
           - --ignore-missing-imports
+          # cf https://github.com/python/mypy/issues/10632#issuecomment-1086711803
+          - --install-types
+          - --non-interactive
 
   - repo: https://github.com/pycqa/flake8
     rev: 6.1.0

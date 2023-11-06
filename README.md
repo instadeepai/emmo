@@ -68,6 +68,17 @@ pip install -e .
 1. _[Only for dev changes]_ Refer to the [contributing document](../CONTRIBUTING.md) for further
    contributing guidelines for the project.
 
+#### Setup remote files support
+
+1. Copy `.env.template` to `.env`
+
+   ```bash
+   cp .env.template .env
+   ```
+
+1. Copy json file with GCP credentials to `.credentials/biontech-tcr-16ca4aceba4c.json` (same file
+   as the one used in BioNDeep).
+
 ## Usage (as a Command-line Tool)
 
 Currently, the following commands are available:
