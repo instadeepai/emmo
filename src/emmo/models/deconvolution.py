@@ -138,7 +138,7 @@ class DeconvolutionModelMHC1:
         ).to_csv(Path(directory) / f"class_weights_{self.n_classes-1}.csv")
 
     def _initialize(self) -> None:
-        """Initialize arrays for position probability matrices and dictionary for the class weights."""
+        """Init arrays for position probability matrices and dictionary for the class weights."""
         # position probability matrices
         self.ppm = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
 

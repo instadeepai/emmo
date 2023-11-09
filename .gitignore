@@ -58,5 +58,9 @@ _minted*/
 validation/local
 *.DS_Store
 
+# Project specific
 models/
 *.csv
+.cache/
+.credentials/
+.env

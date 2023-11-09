@@ -72,6 +72,9 @@ repos:
           - --strict-optional
           - --show-error-context
           - --ignore-missing-imports
+          # cf https://github.com/python/mypy/issues/10632#issuecomment-1086711803
+          - --install-types
+          - --non-interactive
 
   - repo: https://github.com/pycqa/flake8
     rev: 6.1.0
@@ -80,7 +83,7 @@ repos:
         args:
           - --max-line-length=100
           - --max-cognitive-complexity=15
-          - --ignore=E203,E266,E501,W503
+          - --ignore=E203,E266,W503
           - --class-attributes-order=__new__,__init__,__post_init__,__str__,magic_method,property_method,static_method,class_method,save,delete,method
           - --unused-arguments-ignore-dunder
           - --unused-arguments-ignore-abstract-functions
