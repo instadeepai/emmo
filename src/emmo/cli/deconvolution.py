@@ -1,4 +1,5 @@
 """Command line tools for deconvolution."""
+from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
