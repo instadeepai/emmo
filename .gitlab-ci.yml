@@ -48,3 +48,22 @@ lint:
     - pre-commit run --all-files
     - echo $(git log -1 --pretty=%s --no-merges) > current_commit_msg
     - pre-commit run --hook-stage commit-msg --commit-msg-filename current_commit_msg
+
+pytest:
+  image: $DOCKER_IMAGE
+  stage: tests
+  needs: [build]
+  script:
+    # --durations at the end of pytest, the 20 most time consuming tests will be printed
+    - pytest tests --cov=src --durations=20 --doctest-modules
+    # coverage visualization for gitlab
+    # https://docs.gitlab.com/ee/user/project/merge_requests/test_coverage_visualization.html#python-example
+    # https://gitlab.com/gitlab-org/gitlab/-/issues/285086#note_453723254
+    - coverage xml
+
+  coverage: "/TOTAL.+ (0%|[1-9][0-9]?%|100%)/"
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml

@@ -4,6 +4,8 @@ logomaker
 matplotlib
 numpy
 pandas
+pytest
+pytest-cov
 python-dotenv
 pyyaml
 tensorflow>=2.10
