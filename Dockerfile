@@ -1,0 +1,26 @@
+FROM python:3.10
+
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+
+ENV LANG=C.UTF-8
+
+RUN apt update && \
+    apt upgrade
+
+ENV APP_FOLDER=/app USER=app PYTHONPATH=$APP_FOLDER:$PYTHONPATH
+
+RUN groupadd --force --gid $HOST_GID $USER && \
+        useradd -r -m --uid $HOST_UID --gid $HOST_GID $USER
+
+USER $USER
+
+ENV PATH="/home/$USER/.local/bin:${PATH}"
+
+WORKDIR $APP_FOLDER
+
+COPY --chown=$USER requirements.txt /tmp/requirements.txt
+
+RUN pip install --upgrade --quiet pip && \
+    pip install --no-cache-dir -r /tmp/requirements.txt && \
+    rm -rf /tmp/*
