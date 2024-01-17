@@ -3,6 +3,7 @@
 
 # Requirements
 !requirements-linting.txt
+!requirements.txt
 
 # Configuration to run lint job
 !.pre-commit-config.yaml

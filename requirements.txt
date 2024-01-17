@@ -1,0 +1,11 @@
+click
+cloudpathlib[gs]>=0.16.0
+logomaker
+matplotlib
+numpy
+pandas
+pytest
+pytest-cov
+python-dotenv
+pyyaml
+tensorflow>=2.10

@@ -4,6 +4,10 @@ stages:
   - code-quality
 
 variables:
+  DOCKER_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  DOCKER_IMAGE_PREVIOUS: $CI_REGISTRY_IMAGE:$CI_COMMIT_BEFORE_SHA
+  DOCKER_IMAGE_LATEST: $CI_REGISTRY_IMAGE:latest
+
   DOCKER_IMAGE_NAME_LINT: $CI_REGISTRY_IMAGE/lint
   DOCKER_IMAGE_LINT: $DOCKER_IMAGE_NAME_LINT:$CI_COMMIT_SHA
   DOCKER_IMAGE_PREVIOUS_LINT: $DOCKER_IMAGE_NAME_LINT:$CI_COMMIT_BEFORE_SHA
@@ -16,6 +20,15 @@ variables:
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin
       "$CI_REGISTRY"
+
+build:
+  extends: .docker-login
+  stage: build
+  script:
+    - docker pull $DOCKER_IMAGE_PREVIOUS || docker pull $DOCKER_IMAGE_LATEST || true
+    - docker build --cache-from $DOCKER_IMAGE_PREVIOUS --cache-from $DOCKER_IMAGE_LATEST -t
+      $DOCKER_IMAGE .
+    - docker push $DOCKER_IMAGE
 
 build-lint:
   extends: .docker-login
@@ -35,3 +48,22 @@ lint:
     - pre-commit run --all-files
     - echo $(git log -1 --pretty=%s --no-merges) > current_commit_msg
     - pre-commit run --hook-stage commit-msg --commit-msg-filename current_commit_msg
+
+pytest:
+  image: $DOCKER_IMAGE
+  stage: tests
+  needs: [build]
+  script:
+    # --durations at the end of pytest, the 20 most time consuming tests will be printed
+    - pytest tests --cov=src --durations=20 --doctest-modules
+    # coverage visualization for gitlab
+    # https://docs.gitlab.com/ee/user/project/merge_requests/test_coverage_visualization.html#python-example
+    # https://gitlab.com/gitlab-org/gitlab/-/issues/285086#note_453723254
+    - coverage xml
+
+  coverage: "/TOTAL.+ (0%|[1-9][0-9]?%|100%)/"
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
