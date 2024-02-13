@@ -1,17 +1,18 @@
 """Module for functions that parse the output of other tools."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
+from cloudpathlib import AnyPath
 
 from emmo.constants import AA2IDX
 from emmo.constants import NATURAL_AAS
+from emmo.io.file import load_txt
+from emmo.io.file import Openable
 from emmo.resources.background_freqs import get_background
 
 
 def get_class_weight_from_responsibilities_modec(
-    directory: str | Path, number_of_motifs: int
+    directory: Openable, number_of_motifs: int
 ) -> np.ndarray:
     """Obtain class weights from MoDec output.
 
@@ -22,20 +23,19 @@ def get_class_weight_from_responsibilities_modec(
     Returns:
         The class weights.
     """
-    directory = Path(directory)
+    directory = AnyPath(directory)
 
     n = number_of_motifs
     resp_file = directory / "Responsibilities" / f"fullPepRes_K{n}.txt"
 
     lines: list[str] = []
-    with open(resp_file) as f:
-        for line in f:
-            line = line.strip("\n")
-            # header also starts with a valid character ('P')
-            if line[0] in NATURAL_AAS:
-                lines.append(line)
-            else:
-                lines[-1] += line
+
+    for line in load_txt(resp_file):
+        # header also starts with a valid character ('P')
+        if line[0] in NATURAL_AAS:
+            lines.append(line)
+        else:
+            lines[-1] += line
 
     print("Number of lines (incl.) header:", len(lines))
 
@@ -71,7 +71,7 @@ def get_class_weight_from_responsibilities_modec(
     return class_weights
 
 
-def _parse_pwm_modec(file: Path) -> np.ndarray:
+def _parse_pwm_modec(file: Openable) -> np.ndarray:
     """Parse the matrices in the MoDec output.
 
     Args:
@@ -82,18 +82,17 @@ def _parse_pwm_modec(file: Path) -> np.ndarray:
     """
     pwm = np.zeros((9, 20), dtype=np.float64)
 
-    with open(file) as f:
-        lines = f.readlines()
+    lines = load_txt(file)
 
     for aa, line in enumerate(lines[2:]):
-        split_line = line.strip().split("\t")[1:]
+        split_line = line.split("\t")[1:]
         for k, value in enumerate(split_line):
             pwm[k, aa] = float(value)
 
     return pwm
 
 
-def parse_pwms_modec(directory: str | Path, number_of_motifs: int) -> np.ndarray:
+def parse_pwms_modec(directory: Openable, number_of_motifs: int) -> np.ndarray:
     """Parse the MoDec output.
 
     Args:
@@ -103,7 +102,7 @@ def parse_pwms_modec(directory: str | Path, number_of_motifs: int) -> np.ndarray
     Returns:
         The parsed matrices.
     """
-    directory = Path(directory)
+    directory = AnyPath(directory)
 
     n = number_of_motifs
     pwms = np.zeros((n + 1, 9, 20), dtype=np.float64)
@@ -119,7 +118,7 @@ def parse_pwms_modec(directory: str | Path, number_of_motifs: int) -> np.ndarray
     return pwms
 
 
-def parse_sequences_modec(directory: str | Path, number_of_motifs: int) -> list[str]:
+def parse_sequences_modec(directory: Openable, number_of_motifs: int) -> list[str]:
     """Parse the sequences values from MoDec output.
 
     Args:
@@ -129,13 +128,10 @@ def parse_sequences_modec(directory: str | Path, number_of_motifs: int) -> list[
     Returns:
         The parsed sequences.
     """
-    directory = Path(directory)
+    directory = AnyPath(directory)
     file = directory / "Responsibilities" / f"bestPepResp_K{number_of_motifs}.txt"
 
-    with open(file) as f:
-        lines = f.readlines()[1:]
-
-    return [line.split("\t")[0] for line in lines]
+    return [line.split("\t")[0] for line in load_txt(file)[1:]]
 
 
 def loglikelihood_modec(sequences: list[str], pwms: np.ndarray, class_weights: np.ndarray) -> float:
@@ -183,7 +179,7 @@ def loglikelihood_modec(sequences: list[str], pwms: np.ndarray, class_weights: n
     return log_likelihood
 
 
-def _parse_pwm_mixmhcp(file: Path) -> np.ndarray:
+def _parse_pwm_mixmhcp(file_path: Openable) -> np.ndarray:
     """Parse a single PWM output of MixMCHp.
 
     Args:
@@ -194,18 +190,17 @@ def _parse_pwm_mixmhcp(file: Path) -> np.ndarray:
     """
     pwm = np.zeros((9, 20), dtype=np.float64)
 
-    with open(file) as f:
-        lines = f.readlines()
+    lines = load_txt(file_path)
 
     for aa, line in enumerate(lines[1:]):
-        split_line = line.strip().split("\t")[1:]
+        split_line = line.split("\t")[1:]
         for k, value in enumerate(split_line):
             pwm[k, aa] = float(value)
 
     return pwm
 
 
-def parse_pwms_mixmhcp(directory: str | Path, number_of_motifs: int) -> np.ndarray:
+def parse_pwms_mixmhcp(directory: Openable, number_of_motifs: int) -> np.ndarray:
     """Parse all PWMs output by MixMHCp.
 
     Args:
@@ -215,7 +210,7 @@ def parse_pwms_mixmhcp(directory: str | Path, number_of_motifs: int) -> np.ndarr
     Returns:
         The parsed PWMs.
     """
-    directory = Path(directory)
+    directory = AnyPath(directory)
 
     n = number_of_motifs
     pwms = np.zeros((n, 9, 20), dtype=np.float64)
@@ -229,7 +224,7 @@ def parse_pwms_mixmhcp(directory: str | Path, number_of_motifs: int) -> np.ndarr
     return pwms
 
 
-def parse_from_mhcmotifviewer(file_path: str | Path, as_frequencies: bool = True) -> np.ndarray:
+def parse_from_mhcmotifviewer(file_path: Openable, as_frequencies: bool = True) -> np.ndarray:
     """Obtain a position probability matrix from MHCMotifViewer files.
 
     Args:
@@ -239,16 +234,15 @@ def parse_from_mhcmotifviewer(file_path: str | Path, as_frequencies: bool = True
     Returns:
         The parsed PPM.
     """
-    with open(file_path) as f:
-        _, _, _, header, *lines = f.readlines()
-        amino_acids = header.strip().split()
-        sorted_index = {a: i for i, a in enumerate(sorted(amino_acids))}
+    _, _, _, header, *lines = load_txt(file_path)
+    amino_acids = header.split()
+    sorted_index = {a: i for i, a in enumerate(sorted(amino_acids))}
 
-        pwm = np.zeros((len(amino_acids), len(lines)))
+    pwm = np.zeros((len(amino_acids), len(lines)))
 
-        for j, line in enumerate(lines):
-            for a, value in zip(amino_acids, line.split()[2:]):
-                pwm[sorted_index[a], j] = float(value)
+    for j, line in enumerate(lines):
+        for a, value in zip(amino_acids, line.split()[2:]):
+            pwm[sorted_index[a], j] = float(value)
 
     if as_frequencies:
         # following is not ideal since we do not know how exactly the PWM was calculated for

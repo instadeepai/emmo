@@ -1,14 +1,18 @@
 """Module for the deconvolution models used in the EM algorithms."""
 from __future__ import annotations
 
-import json
 from itertools import product
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from cloudpathlib import AnyPath
 
+from emmo.io.file import load_csv
+from emmo.io.file import load_json
+from emmo.io.file import Openable
+from emmo.io.file import save_csv
+from emmo.io.file import save_json
 from emmo.io.output import write_matrices
 from emmo.resources.background_freqs import get_background
 from emmo.utils.exceptions import NotFittedError
@@ -57,7 +61,7 @@ class DeconvolutionModelMHC1:
         self._initialize()
 
     @classmethod
-    def load(cls, directory: str | Path) -> DeconvolutionModelMHC1:
+    def load(cls, directory: Openable) -> DeconvolutionModelMHC1:
         """Load a model from a directory.
 
         Args:
@@ -66,10 +70,9 @@ class DeconvolutionModelMHC1:
         Returns:
             The loaded model.
         """
-        directory = Path(directory)
+        directory = AnyPath(directory)
 
-        with open(directory / "model_specs.json") as f:
-            model_specs = json.load(f)
+        model_specs = load_json(directory / "model_specs.json")
 
         model = cls(
             model_specs["alphabet"],
@@ -82,7 +85,7 @@ class DeconvolutionModelMHC1:
 
         n = model_specs["number_of_classes"]
 
-        df_class_weights = pd.read_csv(directory / f"class_weights_{n}.csv", index_col=0)
+        df_class_weights = load_csv(directory / f"class_weights_{n}.csv", index_col=0)
 
         if len(df_class_weights) != model.n_classes:
             raise ValueError("class weights file is invalid")
@@ -93,30 +96,31 @@ class DeconvolutionModelMHC1:
 
         for i in range(model.number_of_classes):
             file = directory / f"matrix_{n}_{i+1}.csv"
-            matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+            matrix = load_csv(file, index_col=0, header=0).to_numpy()
             if matrix.shape != (model.motif_length, model.n_alphabet):
                 raise ValueError(f"invalid frequency matrix file '{file}'")
             model.ppm[i] = matrix
 
         if model.has_flat_motif:
             file = directory / f"matrix_{n}_flat.csv"
-            matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+            matrix = load_csv(file, index_col=0, header=0).to_numpy()
             model.ppm[-1] = matrix[0]
 
         model.is_fitted = True
 
         return model
 
-    def save(self, directory: str | Path) -> None:
+    def save(self, directory: Openable, force: bool = False) -> None:
         """Save the model to a directory.
 
         Args:
             directory: The directory where to save the model.
+            force: Overwrite file if they already exist.
 
         Raises:
             NotFittedError: If the model has not yet been fitted.
         """
-        directory = Path(directory)
+        directory = AnyPath(directory)
 
         if not self.is_fitted:
             raise NotFittedError()
@@ -126,16 +130,17 @@ class DeconvolutionModelMHC1:
             for x in ["alphabet", "motif_length", "number_of_classes", "training_params"]
         }
 
-        with open(Path(directory) / "model_specs.json", "w") as f:
-            json.dump(model_specs, f)
+        save_json(model_specs, directory / "model_specs.json", force=force)
 
-        write_matrices(directory, self.ppm[:-1], self.alphabet, flat_motif=self.ppm[-1, 0, :])
+        write_matrices(
+            directory, self.ppm[:-1], self.alphabet, flat_motif=self.ppm[-1, 0, :], force=force
+        )
 
-        # write the class weights
-        pd.DataFrame(
+        df_class_weights = pd.DataFrame(
             {f"length_{length}": weights for length, weights in self.class_weights.items()},
             index=list(range(1, self.n_classes)) + ["flat"],
-        ).to_csv(Path(directory) / f"class_weights_{self.n_classes-1}.csv")
+        )
+        save_csv(df_class_weights, directory / f"class_weights_{self.n_classes-1}.csv", force=force)
 
     def _initialize(self) -> None:
         """Init arrays for position probability matrices and dictionary for the class weights."""
@@ -226,7 +231,7 @@ class DeconvolutionModelMHC2:
         self._initialize_arrays()
 
     @classmethod
-    def load(cls, directory: str | Path) -> DeconvolutionModelMHC2:
+    def load(cls, directory: Openable) -> DeconvolutionModelMHC2:
         """Load a model from a directory.
 
         Args:
@@ -235,10 +240,9 @@ class DeconvolutionModelMHC2:
         Returns:
             The loaded model.
         """
-        directory = Path(directory)
+        directory = AnyPath(directory)
 
-        with open(directory / "model_specs.json") as f:
-            model_specs = json.load(f)
+        model_specs = load_json(directory / "model_specs.json")
 
         model = cls(
             model_specs["alphabet"],
@@ -254,7 +258,7 @@ class DeconvolutionModelMHC2:
 
         n = model_specs["number_of_classes"]
 
-        class_weights = pd.read_csv(directory / f"class_weights_{n}.csv", index_col=0).to_numpy()
+        class_weights = load_csv(directory / f"class_weights_{n}.csv", index_col=0).to_numpy()
 
         if class_weights.shape != (model.n_classes, model.n_offsets):
             raise ValueError("class weights file is invalid")
@@ -263,14 +267,14 @@ class DeconvolutionModelMHC2:
 
         for i in range(model.number_of_classes):
             file = directory / f"matrix_{n}_{i+1}.csv"
-            matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+            matrix = load_csv(file, index_col=0, header=0).to_numpy()
             if matrix.shape != (model.motif_length, model.n_alphabet):
                 raise ValueError(f"invalid frequency matrix file '{file}'")
             model.ppm[i] = matrix
 
         if model.has_flat_motif:
             file = directory / f"matrix_{n}_flat.csv"
-            matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+            matrix = load_csv(file, index_col=0, header=0).to_numpy()
             model.ppm[-1] = matrix[0]
 
         model.recompute_pssm()
@@ -278,16 +282,17 @@ class DeconvolutionModelMHC2:
 
         return model
 
-    def save(self, directory: str | Path) -> None:
+    def save(self, directory: Openable, force: bool = False) -> None:
         """Save the model to a directory.
 
         Args:
             directory: The directory where to save the model.
+            force: Overwrite file if they already exist.
 
         Raises:
             NotFittedError: If the model has not yet been fitted.
         """
-        directory = Path(directory)
+        directory = AnyPath(directory)
 
         if not self.is_fitted:
             raise NotFittedError()
@@ -305,15 +310,16 @@ class DeconvolutionModelMHC2:
             ]
         }
 
-        with open(Path(directory) / "model_specs.json", "w") as f:
-            json.dump(model_specs, f)
+        save_json(model_specs, directory / "model_specs.json", force=force)
 
-        write_matrices(directory, self.ppm[:-1], self.alphabet, flat_motif=self.ppm[-1, 0, :])
-
-        # write the class and offset weights
-        pd.DataFrame(self.class_weights, index=list(range(1, self.n_classes)) + ["flat"]).to_csv(
-            Path(directory) / f"class_weights_{self.n_classes-1}.csv"
+        write_matrices(
+            directory, self.ppm[:-1], self.alphabet, flat_motif=self.ppm[-1, 0, :], force=force
         )
+
+        df_class_weights = pd.DataFrame(
+            self.class_weights, index=list(range(1, self.n_classes)) + ["flat"]
+        )
+        save_csv(df_class_weights, directory / f"class_weights_{self.n_classes-1}.csv", force=force)
 
     def _initialize_arrays(self) -> None:
         """Initialize arrays.
@@ -469,7 +475,7 @@ class DeconvolutionModelMHC2NoOffsetWeights:
         self._initialize_arrays()
 
     @classmethod
-    def load(cls, directory: str | Path) -> DeconvolutionModelMHC2NoOffsetWeights:
+    def load(cls, directory: Openable) -> DeconvolutionModelMHC2NoOffsetWeights:
         """Load a model from a directory.
 
         Args:
@@ -478,10 +484,9 @@ class DeconvolutionModelMHC2NoOffsetWeights:
         Returns:
             The loaded model.
         """
-        directory = Path(directory)
+        directory = AnyPath(directory)
 
-        with open(directory / "model_specs.json") as f:
-            model_specs = json.load(f)
+        model_specs = load_json(directory / "model_specs.json")
 
         model = cls(
             model_specs["alphabet"],
@@ -493,7 +498,7 @@ class DeconvolutionModelMHC2NoOffsetWeights:
 
         n = model_specs["number_of_classes"]
 
-        class_weights = pd.read_csv(directory / f"class_weights_{n}.csv", index_col=0).to_numpy()
+        class_weights = load_csv(directory / f"class_weights_{n}.csv", index_col=0).to_numpy()
 
         if class_weights.shape != (model.n_classes, 1):
             raise ValueError(
@@ -505,14 +510,14 @@ class DeconvolutionModelMHC2NoOffsetWeights:
 
         for i in range(model.number_of_classes):
             file = directory / f"matrix_{n}_{i+1}.csv"
-            matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+            matrix = load_csv(file, index_col=0, header=0).to_numpy()
             if matrix.shape != (model.motif_length, model.n_alphabet):
                 raise ValueError(f"invalid frequency matrix file '{file}'")
             model.ppm[i] = matrix
 
         if model.has_flat_motif:
             file = directory / f"matrix_{n}_flat.csv"
-            matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+            matrix = load_csv(file, index_col=0, header=0).to_numpy()
             model.ppm[-1] = matrix[0]
 
         model.recompute_pssm()
@@ -520,16 +525,17 @@ class DeconvolutionModelMHC2NoOffsetWeights:
 
         return model
 
-    def save(self, directory: str | Path) -> None:
+    def save(self, directory: Openable, force: bool = False) -> None:
         """Save the model to a directory.
 
         Args:
             directory: The directory where to save the model.
+            force: Overwrite file if they already exist.
 
         Raises:
             NotFittedError: If the model has not yet been fitted.
         """
-        directory = Path(directory)
+        directory = AnyPath(directory)
 
         if not self.is_fitted:
             raise NotFittedError()
@@ -545,15 +551,17 @@ class DeconvolutionModelMHC2NoOffsetWeights:
             ]
         }
 
-        with open(Path(directory) / "model_specs.json", "w") as f:
-            json.dump(model_specs, f)
+        save_json(model_specs, directory / "model_specs.json", force=force)
 
-        write_matrices(directory, self.ppm[:-1], self.alphabet, flat_motif=self.ppm[-1, 0, :])
+        write_matrices(
+            directory, self.ppm[:-1], self.alphabet, flat_motif=self.ppm[-1, 0, :], force=force
+        )
 
         # write the class weights
-        pd.DataFrame(self.class_weights, index=list(range(1, self.n_classes)) + ["flat"]).to_csv(
-            Path(directory) / f"class_weights_{self.n_classes-1}.csv"
+        df_class_weights = pd.DataFrame(
+            self.class_weights, index=list(range(1, self.n_classes)) + ["flat"]
         )
+        save_csv(df_class_weights, directory / f"class_weights_{self.n_classes-1}.csv", force=force)
 
     def _initialize_arrays(self) -> None:
         """Initialize arrays.
@@ -658,7 +666,7 @@ if __name__ == "__main__":
 
     model = DeconvolutionModelMHC2.load(directory)
 
-    df = pd.read_csv(
+    df = load_csv(
         REPO_DIRECTORY / "validation" / "local" / f"{input_name}.txt",
         header=None,
         names=["peptide"],
@@ -666,4 +674,4 @@ if __name__ == "__main__":
     df["score"] = model.predict(df["peptide"])
 
     print(df)
-    df.to_csv(REPO_DIRECTORY / "validation" / "local" / f"{input_name}_scored.csv")
+    save_csv(df, REPO_DIRECTORY / "validation" / "local" / f"{input_name}_scored.csv", force=True)

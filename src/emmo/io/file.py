@@ -335,7 +335,6 @@ def save_csv(
     """Save a pandas dataframe to a local / remote file.
 
     Remarks:
-    - by default, `index=False` is used
     - all keyword arguments will be forwarded to `pd.DataFrame.to_csv` function
 
     Args:
@@ -359,7 +358,6 @@ def save_csv(
             f"Mismatch between 'compression={compression}' and file's extension {file_path}"
         )
 
-    kwargs["index"] = kwargs.get("index", False)
     _save_file(
         obj=df,
         file_path=file_path,

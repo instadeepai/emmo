@@ -5,11 +5,10 @@ initialized at random.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 
 from emmo.em.mhc2 import EMRunnerMHC2
+from emmo.io.file import Openable
 from emmo.io.sequences import SequenceManager
 
 
@@ -103,12 +102,13 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
 
     def run(
         self,
-        output_directory: str | Path,
+        output_directory: Openable,
         output_all_runs: bool = False,
         n_runs: int = 5,
         random_seed: int = 0,
         min_error: float = 1e-3,
         pseudocount: float = 0.1,
+        force: bool = False,
     ) -> None:
         """Run the expectation-maximization algorithm.
 
@@ -123,6 +123,7 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
             min_error: When the log likelihood difference between two steps becomes smaller than
                 this value, the EM run is finished.
             pseudocount: The pseudocounts to be used in the EM algorithm.
+            force: Overwrite files if they already exist.
         """
         # when the initial classes are given, we just need one EM run as they will produce
         # identical results
@@ -142,4 +143,5 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
             random_seed=random_seed,
             min_error=min_error,
             pseudocount=pseudocount,
+            force=force,
         )

@@ -7,11 +7,11 @@ are estimated.
 from __future__ import annotations
 
 import itertools
-from pathlib import Path
 from time import perf_counter
 
 import numpy as np
 
+from emmo.io.file import Openable
 from emmo.io.output import write_matrices
 from emmo.io.output import write_responsibilities
 from emmo.io.sequences import SequenceManager
@@ -501,19 +501,23 @@ class FullEM:
         """
         return sum(r.get_number_of_parameters() for r in self.runners.values())
 
-    def write_results(self, directory: str | Path) -> None:
+    def write_results(self, directory: Openable, force: bool = True) -> None:
         """Write the results into a directory.
 
         Args:
             directory: The output directory.
+            force: Overwrite files if they already exist.
         """
-        write_matrices(directory, self.pwm[:-1], self.sm.alphabet, flat_motif=self.pwm[-1][0])
+        write_matrices(
+            directory, self.pwm[:-1], self.sm.alphabet, flat_motif=self.pwm[-1][0], force=force
+        )
 
         write_responsibilities(
             directory,
             self.sm,
             {length: runner.get_responsibilities() for length, runner in self.runners.items()},
             self.N,
+            force=force,
         )
 
 
@@ -525,10 +529,9 @@ if __name__ == "__main__":
     directory = REPO_DIRECTORY / "validation" / "local"
     file = directory / f"{input_name}.txt"
     output_directory = directory / input_name
-    output_directory.mkdir(parents=True, exist_ok=True)
 
     sm = SequenceManager(file)
     em_runner = FullEM(sm, 9, 2)
     em_runner.run()
 
-    em_runner.write_results(output_directory)
+    em_runner.write_results(output_directory, force=True)

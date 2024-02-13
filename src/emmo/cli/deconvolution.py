@@ -3,24 +3,28 @@ from pathlib import Path
 from typing import Any
 
 import click
+from cloudpathlib import AnyPath
+from cloudpathlib import CloudPath
 
 from emmo.io.sequences import SequenceManager
+from emmo.utils.click import abort_if_not_exists
 
 
 @click.command()
 @click.option(
     "--input_file",
     "-i",
-    type=str,
+    type=AnyPath,
     required=True,
-    help="Path to the input file containing the peptides.",
+    callback=abort_if_not_exists,
+    help="Path to the local or remote input file containing the peptides.",
 )
 @click.option(
     "--output_directory",
     "-o",
-    type=str,
+    type=AnyPath,
     required=True,
-    help="Output directory.",
+    help="Local or remote output directory.",
 )
 @click.option(
     "--motif_length",
@@ -81,8 +85,8 @@ from emmo.io.sequences import SequenceManager
     ),
 )
 def deconvolute_mhc2(
-    input_file: str | Path,
-    output_directory: str | Path,
+    input_file: Path | CloudPath,
+    output_directory: Path | CloudPath,
     motif_length: int,
     min_classes: int,
     max_classes: int,
@@ -92,9 +96,6 @@ def deconvolute_mhc2(
     force: bool,
 ) -> None:
     """Run the deconvolution for MHC2 ligands."""
-    input_file = Path(input_file)
-    output_directory = Path(output_directory)
-
     if output_directory.is_dir():
         if not force:
             raise FileExistsError(
@@ -103,8 +104,6 @@ def deconvolute_mhc2(
             )
     elif output_directory.exists():
         raise FileExistsError(f"path {output_directory} exists but is not a directory")
-    else:
-        output_directory.mkdir(parents=False, exist_ok=False)
 
     sm = SequenceManager(input_file)
 
@@ -120,7 +119,6 @@ def deconvolute_mhc2(
 
     for i in range(min_classes, max_classes + 1):
         output_dir_i = output_directory / f"classes_{i}"
-        output_dir_i.mkdir(parents=True, exist_ok=True)
 
         em_runner = runner_class(sm, motif_length, i)
         em_runner.run(

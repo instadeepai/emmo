@@ -3,33 +3,41 @@ from pathlib import Path
 from typing import Optional
 
 import click
-import pandas as pd
+from cloudpathlib import AnyPath
+from cloudpathlib import CloudPath
 
-from emmo.constants import MODEL_DIRECTORY
+from emmo.constants import MODELS_DIRECTORY
+from emmo.io.file import load_csv
+from emmo.io.file import save_csv
 from emmo.models.prediction import PredictorMHC2
+from emmo.utils.click import abort_if_not_exists
 
 
 @click.command()
 @click.option(
     "--input_file",
     "-i",
-    type=Path,
+    type=AnyPath,
+    callback=abort_if_not_exists,
     required=True,
-    help="Path to the input csv file.",
+    help="Path to remote or local input CSV file.",
 )
 @click.option(
     "--output_file",
     "-o",
-    type=Path,
+    type=AnyPath,
     required=True,
-    help="Path to the output csv file.",
+    help="Local or remote file path to save the CSV file with predictions.",
 )
 @click.option(
     "--model",
     "-m",
     type=str,
     required=True,
-    help="Path to the model directory.",
+    help=(
+        f"Path to the model directory, name of a model in the models folder {MODELS_DIRECTORY}, "
+        "or bucket path."
+    ),
 )
 @click.option(
     "--model_name",
@@ -88,8 +96,8 @@ from emmo.models.prediction import PredictorMHC2
     ),
 )
 def predict_mhc2(
-    input_file: Path,
-    output_file: Path,
+    input_file: Path | CloudPath,
+    output_file: Path | CloudPath,
     model: str,
     model_name: Optional[str],
     peptide_column: str,
@@ -108,12 +116,12 @@ def predict_mhc2(
         elif output_file.is_dir():
             raise ValueError(f"the output path {output_file} exists and is a directory")
 
-    model_path, directory_name = _get_model_path_and_name(model)
+    model_path = _get_model_path(model)
     predictor = PredictorMHC2.load(model_path)
 
-    model_name = model_name if model_name is not None else directory_name
+    model_name = model_name if model_name is not None else model_path.name
 
-    df = pd.read_csv(input_file)
+    df = load_csv(input_file)
 
     # run the prediction
     predictor.score_dataframe(
@@ -128,10 +136,10 @@ def predict_mhc2(
         inplace=True,
     )
 
-    df.to_csv(output_file, index=False)
+    save_csv(df, output_file, index=False, force=True)
 
 
-def _get_model_path_and_name(model: str) -> tuple[Path, str]:
+def _get_model_path(model: str) -> Path | CloudPath:
     """Return the model path and the name of the model directory.
 
     Args:
@@ -139,23 +147,22 @@ def _get_model_path_and_name(model: str) -> tuple[Path, str]:
             repository.
 
     Returns:
-        The (possibly inferred) path to the model and the name of the model directory.
+        The (possibly inferred) path to the model.
     """
-    model_path = Path(model)
+    model_path = AnyPath(model)
 
     if not model_path.exists():
         # if path does not exist, try to find the precompiled model this will only work, if the
         # models folder has the correct location relative to the package
-        model_path = MODEL_DIRECTORY / "binding-predictor" / model
+        model_path = MODELS_DIRECTORY / "binding_predictor" / model
 
     if not model_path.exists():
         raise ValueError(
-            f"Was not able to identify location of model {model}. "
-            "Make sure that the `models` folder is reachable relative to "
-            "the package location or provide or valid path (absolute or "
-            "relative to working directory)."
+            f"Was not able to identify location of model {model}. Make sure that the 'models' "
+            "folder is reachable relative to the package location or provide or valid path "
+            "(absolute or relative to working directory, or cloud path)."
         )
     elif not model_path.is_dir():
         raise ValueError(f"The model path {model_path} exists but is not a directory.")
 
-    return model_path, model_path.name
+    return model_path

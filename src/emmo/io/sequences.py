@@ -5,15 +5,16 @@ import collections
 import itertools
 from collections import Counter
 from collections import defaultdict
-from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 from emmo.constants import NATURAL_AAS
+from emmo.io.file import load_csv
+from emmo.io.file import load_txt
+from emmo.io.file import Openable
 
 
-def _read_sequences(file_path: str | Path) -> list[str]:
+def _read_sequences(file_path: Openable) -> list[str]:
     """Read sequences from a file.
 
     Args:
@@ -22,17 +23,11 @@ def _read_sequences(file_path: str | Path) -> list[str]:
     Returns:
         The sequences.
     """
-    seqs = []
-
-    with open(file_path) as f:
-        for line in f:
-            seqs.append(line.strip())
-
-    return seqs
+    return load_txt(file_path)
 
 
 def _read_sequences_with_class_information(
-    file_path: str | Path, sequence_column: str, class_column: str
+    file_path: Openable, sequence_column: str, class_column: str
 ) -> tuple[list[str], list[str]]:
     """Read sequences with associated class.
 
@@ -47,7 +42,7 @@ def _read_sequences_with_class_information(
     Returns:
         The sequences and their associated classes.
     """
-    df = pd.read_csv(file_path)
+    df = load_csv(file_path)
     seqs = df[sequence_column].astype(str).tolist()
     classes = df[class_column].astype(str).tolist()
 
@@ -59,7 +54,7 @@ class SequenceManager:
 
     def __init__(
         self,
-        file_path: str | Path,
+        file_path: Openable,
         alphabet: str = "default",
         sequence_column: str | None = None,
         class_column: str | None = None,
