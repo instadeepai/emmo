@@ -4,12 +4,14 @@ This predictor is similar to MixMHC2pred (Racle et al. 2019).
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
+from cloudpathlib import AnyPath
 
+from emmo.io.file import load_csv
+from emmo.io.file import load_json
+from emmo.io.file import Openable
+from emmo.io.file import save_json
 from emmo.io.output import write_matrix
 from emmo.io.sequences import SequenceManager
 from emmo.models.cleavage import CleavageModel
@@ -29,7 +31,7 @@ class PredictorMHC2:
         self,
         alphabet: str | tuple[str, ...] | list[str],
         ppms: dict[str, np.ndarray],
-        cleavage_model_path: Path | str,
+        cleavage_model_path: Openable,
         offset_weights: np.ndarray,
         motif_length: int = 9,
         background: str = "MHC2_biondeep",
@@ -56,7 +58,7 @@ class PredictorMHC2:
 
         self.ppms = ppms
         self.available_alleles = sorted(self.ppms)
-        self.cleavage_model = CleavageModel.load(Path(cleavage_model_path))
+        self.cleavage_model = CleavageModel.load(cleavage_model_path)
         self.offset_weights = offset_weights
         self.motif_length = motif_length
 
@@ -71,7 +73,7 @@ class PredictorMHC2:
             raise ValueError("number of offsets weights does not match")
 
     @classmethod
-    def load(cls, directory: str | Path) -> PredictorMHC2:
+    def load(cls, directory: Openable) -> PredictorMHC2:
         """Load a model from a directory.
 
         Args:
@@ -80,16 +82,15 @@ class PredictorMHC2:
         Returns:
             The loaded model.
         """
-        directory = Path(directory)
+        directory = AnyPath(directory)
 
-        with open(directory / "model_specs.json") as f:
-            model_specs = json.load(f)
+        model_specs = load_json(directory / "model_specs.json")
 
         ppms = {}
         for file in (directory / "binding").iterdir():
             if file.is_file() and file.suffix == ".csv":
                 allele = file.stem
-                matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+                matrix = load_csv(file, index_col=0, header=0).to_numpy()
                 ppms[allele] = matrix
 
         length_distribution = {
@@ -108,9 +109,9 @@ class PredictorMHC2:
     @classmethod
     def compile_from_selected_models(
         cls,
-        selected_models: dict[str, tuple[Path, int, int]],
-        cleavage_model_path: Path | str,
-        peptides_path: Path | str | None = None,
+        selected_models: dict[str, tuple[Openable, int, int]],
+        cleavage_model_path: Openable,
+        peptides_path: Openable | None = None,
         motif_length: int = 9,
         background: str = "MHC2_biondeep",
         length_distribution: str = "MHC2_biondeep",
@@ -140,6 +141,7 @@ class PredictorMHC2:
         """
         loaded_binding_models = {}
         for allele, (path, k, _) in selected_models.items():
+            path = AnyPath(path)
             try:
                 loaded_binding_models[allele] = Model.load(path / f"classes_{k}")
             except FileNotFoundError:
@@ -170,7 +172,7 @@ class PredictorMHC2:
 
     @classmethod
     def _recompute_ppms(
-        cls, selected_models: dict[str, tuple[Path, int, int]]
+        cls, selected_models: dict[str, tuple[AnyPath, int, int]]
     ) -> dict[str, np.ndarray]:
         """Recompute PPMs from the core predictions.
 
@@ -186,10 +188,10 @@ class PredictorMHC2:
         for allele, (path, k, i) in selected_models.items():
             # load the responsibilities table
             try:
-                resp = pd.read_csv(path / f"classes_{k}" / "responsibilities.csv")
+                resp = load_csv(path / f"classes_{k}" / "responsibilities.csv")
             except FileNotFoundError:
                 # compatibility with older runs
-                resp = pd.read_csv(path / f"clusters{k}" / "responsibilities.csv")
+                resp = load_csv(path / f"clusters{k}" / "responsibilities.csv")
 
             sequences = list(
                 resp.loc[resp["best_class"].astype(str) == str(i), "binding_core_prediction"]
@@ -210,9 +212,9 @@ class PredictorMHC2:
     @classmethod
     def _compute_averaged_offset_weights(
         cls,
-        selected_models: dict[str, tuple[Path, int, int]],
+        selected_models: dict[str, tuple[Openable, int, int]],
         loaded_binding_models: dict[str, Model],
-        peptides_path: Path | str | None = None,
+        peptides_path: Openable | None = None,
     ) -> np.ndarray:
         """Weighted average of the offset weights over all models.
 
@@ -234,7 +236,7 @@ class PredictorMHC2:
 
         # if peptides path is provided, recompute the effective peptide count from there
         if peptides_path:
-            for file in Path(peptides_path).iterdir():
+            for file in AnyPath(peptides_path).iterdir():
                 allele = file.stem
                 sm = SequenceManager(file)
                 effective_peptide_counts_per_allele[allele] = np.sum(sm.get_similarity_weights())
@@ -273,34 +275,28 @@ class PredictorMHC2:
 
         return averaged_weights / np.sum(averaged_weights)
 
-    def save(self, directory: str | Path, force: bool = False) -> None:
+    def save(self, directory: Openable, force: bool = False) -> None:
         """Save the model to a directory.
 
         Args:
             directory: The directory where to save the model.
             force: Whether to also write the model files if the directory already exists.
         """
-        directory = Path(directory)
-        directory.mkdir(parents=True, exist_ok=force)
-
+        directory = AnyPath(directory)
         directory_binding = directory / "binding"
-        directory_binding.mkdir(exist_ok=True)
-
         directory_cleavage = directory / "cleavage"
-        directory_cleavage.mkdir(exist_ok=True)
 
         model_specs = {
             x: self.__dict__[x] for x in ["alphabet", "motif_length", "length_distribution"]
         }
         model_specs["offset_weights"] = self.offset_weights.tolist()
 
-        with open(directory / "model_specs.json", "w") as f:
-            json.dump(model_specs, f)
+        save_json(model_specs, directory / "model_specs.json", force=force)
 
         for allele, ppm in self.ppms.items():
-            write_matrix(directory_binding / f"{allele}.csv", ppm, self.alphabet)
+            write_matrix(directory_binding / f"{allele}.csv", ppm, self.alphabet, force=force)
 
-        self.cleavage_model.save(directory_cleavage)
+        self.cleavage_model.save(directory_cleavage, force=force)
 
     def _score_binding(
         self,

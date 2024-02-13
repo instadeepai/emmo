@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from itertools import product
-from pathlib import Path
 from time import perf_counter
 
 import numpy as np
 import pandas as pd
+from cloudpathlib import AnyPath
 
+from emmo.io.file import Openable
+from emmo.io.file import save_csv
 from emmo.io.sequences import SequenceManager
 from emmo.models.deconvolution import DeconvolutionModelMHC2NoOffsetWeights
 from emmo.resources.background_freqs import get_background
@@ -205,12 +207,13 @@ class VariableLengthEM:
 
     def run(
         self,
-        output_directory: str | Path,
+        output_directory: Openable,
         output_all_runs: bool = False,
         n_runs: int = 5,
         random_seed: int = 0,
         min_error: float = 1e-3,
         pseudocount: float = 0.1,
+        force: bool = False,
     ) -> None:
         """Run the expectation-maximization algorithm.
 
@@ -225,8 +228,9 @@ class VariableLengthEM:
             min_error: When the log likelihood difference between two steps becomes smaller than
                 this value, the EM run is finished.
             pseudocount: The pseudocounts to be used in the EM algorithm.
+            force: Overwrite files if they already exist.
         """
-        path = Path(output_directory)
+        path = AnyPath(output_directory)
 
         self.score_per_run = []
         self.log_likelihood_per_run = []
@@ -303,12 +307,12 @@ class VariableLengthEM:
 
             if output_all_runs:
                 path_i = path / f"run{run}"
-                path_i.mkdir(parents=True, exist_ok=True)
 
-                self.model.save(path_i)
+                self.model.save(path_i, force=force)
                 self._write_responsibilities(
                     path_i,
                     {length: runner.responsibilities for length, runner in self.runners.items()},
+                    force=force,
                 )
 
             if score > self.best_score:
@@ -319,7 +323,7 @@ class VariableLengthEM:
                     length: runner.responsibilities for length, runner in self.runners.items()
                 }
 
-        self.write_summary(path)
+        self.write_summary(path, force=force)
 
     def _map_classes_to_indices(self) -> dict[str, int]:
         """Map the class names to indices.
@@ -359,7 +363,7 @@ class VariableLengthEM:
         return mapping
 
     def run_with_known_classes(
-        self, output_directory: str | Path, min_error: float = 1e-3, pseudocount: float = 0.1
+        self, output_directory: Openable, min_error: float = 1e-3, pseudocount: float = 0.1
     ) -> None:
         """Run the expectation-maximization algorithm with known classes for initialization.
 
@@ -442,7 +446,7 @@ class VariableLengthEM:
             length: runner.responsibilities for length, runner in self.runners.items()
         }
 
-        self.write_summary(Path(output_directory))
+        self.write_summary(output_directory)
 
     def _initialize_new_model(self) -> None:
         """Initialize a new model instance."""
@@ -537,9 +541,7 @@ class VariableLengthEM:
         return self.best_responsibilities
 
     def _write_responsibilities(
-        self,
-        directory: Path,
-        responsibilities: dict[int, np.ndarray],
+        self, directory: Openable, responsibilities: dict[int, np.ndarray], force: bool
     ) -> None:
         """Write responsibility values to a file.
 
@@ -547,9 +549,10 @@ class VariableLengthEM:
             directory: The output directory.
             responsibilities: The responsibility values to be written the file
                 'responsibilities.csv'.
+            force: Overwrite files if they already exist.
         """
+        directory = AnyPath(directory)
         n_sequences = len(self.sm.sequences)
-
         n_classes, _ = next(iter(responsibilities.values())).shape[1:]
 
         # VARIANT 1: cumulated responsibilities (over all offsets)
@@ -570,6 +573,7 @@ class VariableLengthEM:
         )
 
         df["best_class_cumulated"] = np.argmax(all_cum_responsibilities, axis=1) + 1
+        df["best_class_cumulated"] = df["best_class_cumulated"].astype(str)
         df.loc[(df["best_class_cumulated"] == n_classes), "best_class_cumulated"] = "flat"
 
         # VARIANT 2: maximum responsibilities directly taken from the
@@ -598,19 +602,18 @@ class VariableLengthEM:
         # finally insert the peptide sequence as the first column
         df.insert(0, "peptide", self.sm.sequences)
 
-        df.to_csv(directory / "responsibilities.csv")
+        save_csv(df, directory / "responsibilities.csv", force=force)
 
-    def write_summary(self, directory: str | Path) -> None:
+    def write_summary(self, directory: Openable, force: bool = False) -> None:
         """Write the best model, responsibilities, and summary of runs.
 
         Args:
             directory: The output directory.
+            force: Overwrite files if they already exist.
         """
-        directory = Path(directory)
-
-        self.best_model.save(directory)
-
-        self._write_responsibilities(directory, self.get_responsibilities())
+        directory = AnyPath(directory)
+        self.best_model.save(directory, force=force)
+        self._write_responsibilities(directory, self.get_responsibilities(), force)
 
         d = {
             "score": self.score_per_run,
@@ -619,17 +622,17 @@ class VariableLengthEM:
             "EM_steps": self.steps_per_run,
             "time": self.time_per_run,
         }
-        df = pd.DataFrame(d)
-        df.to_csv(directory / "runs.csv")
+        save_csv(pd.DataFrame(d), directory / "runs.csv", force=force)
 
 
 if __name__ == "__main__":
+    from emmo.constants import REPO_DIRECTORY
+
     input_name = "HLA-A0101_A0218_background_class_II"
-    directory = Path().absolute().parent.parent.parent / "validation" / "local"
+    directory = REPO_DIRECTORY / "validation" / "local"
     file = directory / f"{input_name}.txt"
     output_directory = directory / input_name
-    output_directory.mkdir(parents=True, exist_ok=True)
 
     sm = SequenceManager(file)
     em_runner = VariableLengthEM(sm, 9, 2)
-    em_runner.run(output_directory, output_all_runs=True)
+    em_runner.run(output_directory, output_all_runs=True, force=True)

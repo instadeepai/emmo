@@ -1,12 +1,15 @@
 """Module for th cleavage model."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
+from cloudpathlib import AnyPath
 
+from emmo.io.file import load_csv
+from emmo.io.file import load_json
+from emmo.io.file import Openable
+from emmo.io.file import save_csv
+from emmo.io.file import save_json
 from emmo.io.output import write_matrices
 from emmo.resources.background_freqs import get_background
 from emmo.utils.exceptions import NotFittedError
@@ -60,7 +63,7 @@ class CleavageModel:
         self._initialize_arrays()
 
     @classmethod
-    def load(cls, directory: str | Path) -> CleavageModel:
+    def load(cls, directory: Openable) -> CleavageModel:
         """Load a model from a directory.
 
         Args:
@@ -69,10 +72,9 @@ class CleavageModel:
         Returns:
             The loaded cleavage model.
         """
-        directory = Path(directory)
+        directory = AnyPath(directory)
 
-        with open(directory / "model_specs.json") as f:
-            model_specs = json.load(f)
+        model_specs = load_json(directory / "model_specs.json")
 
         model = cls(
             model_specs["alphabet"],
@@ -92,7 +94,7 @@ class CleavageModel:
             [model.ppm_n, model.ppm_c],
         ):
             # class weights
-            matrix = pd.read_csv(
+            matrix = load_csv(
                 directory / subfolder / f"class_weights_{n}.csv", index_col=0
             ).to_numpy()
 
@@ -107,14 +109,15 @@ class CleavageModel:
             # PPMs
             for i in range(n):
                 file = directory / subfolder / f"matrix_{n}_{i+1}.csv"
-                matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+                matrix = load_csv(file, index_col=0, header=0).to_numpy()
                 if matrix.shape != (terminus_length, model.n_alphabet):
                     raise ValueError(f"invalid frequency matrix file '{file}'")
                 ppm[i] = matrix
 
             if model.has_flat_motif:
-                file = directory / subfolder / f"matrix_{n}_flat.csv"
-                matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+                matrix = load_csv(
+                    directory / subfolder / f"matrix_{n}_flat.csv", index_col=0, header=0
+                ).to_numpy()
                 ppm[-1] = matrix[0]
 
         model.recompute_pssm()
@@ -125,8 +128,8 @@ class CleavageModel:
     @classmethod
     def load_from_separate_models(
         cls,
-        directory_n: str | Path,
-        directory_c: str | Path,
+        directory_n: Openable,
+        directory_c: Openable,
     ) -> CleavageModel:
         """Compile a model from separate deconvolution model for N- and C-terminus.
 
@@ -137,13 +140,11 @@ class CleavageModel:
         Returns:
             The compiled cleavage model.
         """
-        directory_n = Path(directory_n)
-        directory_c = Path(directory_c)
+        directory_n = AnyPath(directory_n)
+        directory_c = AnyPath(directory_c)
 
-        with open(directory_n / "model_specs.json") as f:
-            model_specs_n = json.load(f)
-        with open(directory_c / "model_specs.json") as f:
-            model_specs_c = json.load(f)
+        model_specs_n = load_json(directory_n / "model_specs.json")
+        model_specs_c = load_json(directory_c / "model_specs.json")
 
         for spec in ("alphabet", "number_of_classes", "has_flat_motif", "background"):
             if model_specs_n[spec] != model_specs_c[spec]:
@@ -167,7 +168,7 @@ class CleavageModel:
             [model.ppm_n, model.ppm_c],
         ):
             # class weights
-            matrix = pd.read_csv(directory / f"class_weights_{n}.csv", index_col=0).to_numpy()
+            matrix = load_csv(directory / f"class_weights_{n}.csv", index_col=0).to_numpy()
 
             if matrix.shape != (model.n_classes, 1):
                 raise ValueError(
@@ -180,14 +181,15 @@ class CleavageModel:
             # PPMs
             for i in range(n):
                 file = directory / f"matrix_{n}_{i+1}.csv"
-                matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+                matrix = load_csv(file, index_col=0, header=0).to_numpy()
                 if matrix.shape != (terminus_length, model.n_alphabet):
                     raise ValueError(f"invalid frequency matrix file '{file}'")
                 ppm[i] = matrix
 
             if model.has_flat_motif:
-                file = directory / f"matrix_{n}_flat.csv"
-                matrix = pd.read_csv(file, index_col=0, header=0).to_numpy()
+                matrix = load_csv(
+                    directory / f"matrix_{n}_flat.csv", index_col=0, header=0
+                ).to_numpy()
                 ppm[-1] = matrix[0]
 
         model.recompute_pssm()
@@ -195,11 +197,12 @@ class CleavageModel:
 
         return model
 
-    def save(self, directory: str | Path) -> None:
+    def save(self, directory: Openable, force: bool = False) -> None:
         """Save the model to a directory.
 
         Args:
             directory: The directory where to save the model.
+            force: Overwrite existing model files.
 
         Raises:
             NotFittedError: If the model has not yet been fitted.
@@ -207,13 +210,9 @@ class CleavageModel:
         if not self.is_fitted:
             raise NotFittedError()
 
-        directory = Path(directory)
-
+        directory = AnyPath(directory)
         directory_n = directory / "N-terminus"
-        directory_n.mkdir(parents=True, exist_ok=True)
-
         directory_c = directory / "C-terminus"
-        directory_c.mkdir(parents=True, exist_ok=True)
 
         model_specs = {
             x: self.__dict__[x]
@@ -227,21 +226,36 @@ class CleavageModel:
             ]
         }
 
-        with open(directory / "model_specs.json", "w") as f:
-            json.dump(model_specs, f)
+        save_json(model_specs, directory / "model_specs.json", force=force)
 
         # N-terminus
-        write_matrices(directory_n, self.ppm_n[:-1], self.alphabet, flat_motif=self.ppm_n[-1, 0, :])
+        write_matrices(
+            directory_n,
+            self.ppm_n[:-1],
+            self.alphabet,
+            flat_motif=self.ppm_n[-1, 0, :],
+            force=force,
+        )
 
-        pd.DataFrame(self.class_weights_n, index=list(range(1, self.n_classes)) + ["flat"]).to_csv(
-            directory_n / f"class_weights_{self.n_classes-1}.csv"
+        save_csv(
+            pd.DataFrame(self.class_weights_n, index=list(range(1, self.n_classes)) + ["flat"]),
+            directory_n / f"class_weights_{self.n_classes-1}.csv",
+            force=force,
         )
 
         # C-terminus
-        write_matrices(directory_c, self.ppm_c[:-1], self.alphabet, flat_motif=self.ppm_c[-1, 0, :])
+        write_matrices(
+            directory_c,
+            self.ppm_c[:-1],
+            self.alphabet,
+            flat_motif=self.ppm_c[-1, 0, :],
+            force=force,
+        )
 
-        pd.DataFrame(self.class_weights_c, index=list(range(1, self.n_classes)) + ["flat"]).to_csv(
-            directory_c / f"class_weights_{self.n_classes-1}.csv"
+        save_csv(
+            pd.DataFrame(self.class_weights_c, index=list(range(1, self.n_classes)) + ["flat"]),
+            directory_c / f"class_weights_{self.n_classes-1}.csv",
+            force=force,
         )
 
     def _initialize_arrays(self) -> None:

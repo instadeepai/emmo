@@ -25,8 +25,8 @@ To install EMMo, you can run
 pip install .
 ```
 
-The repository comes with a number of precompiled models for peptide-MHC2 binding prediction in the
-folder `models/binding-predictor`. These models can be loaded in the `emmo predict-mhc2`
+Precompiled models for peptide-MHC2 binding prediction can be downloaded from the GCP bucket to the
+folder `models/binding_predictor`. These models can then be loaded in the `emmo predict-mhc2`
 command-line script by simply providing their name instead of a full path, under the condition that
 the `models` folder is in the correct relative location w.r.t. the package installation (i.e., the
 same as in the repository). An option to ensure the latter is to download the complete repository
@@ -112,6 +112,8 @@ For a description of the precompiled models see
 Example usage:
 
 ```
+emmo pull-model --model_name gs://biondeep-models/emmo/binding_predictor/mhc2_msdb_2020_full_train_tune_ppm_recomputed_20230718
+
 emmo predict-mhc2
     --input_file peptides_and_alleles.csv
     --output_file peptides_and_alleles_scored.csv
@@ -155,7 +157,6 @@ sm = SequenceManager(INPUT_FILE)
 
 for i in range(MIN_CLASSES, MAX_CLASSES + 1):
     output_dir_i = OUTPUT_DIR / f'classes_{i}'
-    output_dir_i.mkdir(parents=True, exist_ok=True)
 
     em_runner = EMRunnerMHC2(sm, MOTIF_LENGTH, i)
     em_runner.run(
@@ -194,16 +195,18 @@ The predictor can be used as follows:
 import pandas as pd
 
 # folder with precompiled models must be reachable
-from emmo.constants import MODEL_DIRECTORY
+from emmo.constants import MODELS_DIRECTORY
+from emmo.io.file import load_csv
+from emmo.io.file import save_csv
 from emmo.models.prediction import PredictorMHC2
 
 # assumes that the file has columns 'peptide', 'allele_alpha', and 'allele_beta'
 # (alleles formatted like 'DRB10101' and 'DRA0101')
-df = pd.read_csv('path/to/input.csv')
+df = load_csv('path/to/input.csv')
 
 # load the model
 predictor =  PredictorMHC2.load(
-    MODEL_DIRECTORY / 'binding-predictor' /
+    MODELS_DIRECTORY / 'binding_predictor' /
     'mhc2_msdb_2020_full_train_tune_ppm_recomputed_20230718'
 )
 
@@ -217,7 +220,7 @@ df_scored = predictor.score_dataframe(
 )
 
 # write to file
-df_scored.to_csv(path/to/output.csv)
+save_csv(df_scored, "path/to/output.csv")
 ```
 
 ## Available models
@@ -242,10 +245,20 @@ minimal-length peptides of each nested set). Since MoDec/EMMo have their own mec
 with shared sequences (downweighting peptides that are overlapping with others), models were also
 obtained using the full set of MHC2 ligands in the train and tune partition.
 
-This results in the following four models in the folder `models/binding-predictor`:
+This results in the following models:
 
-- `mhc2_msdb_2020_nests_train_tune_ppm_direct_20230522` (PPM direct, representatives from nests)
-- `mhc2_msdb_2020_nests_train_tune_ppm_recomputed_20230522` (PPM recomputed, representatives from
-  nests)
-- `mhc2_msdb_2020_full_train_tune_ppm_direct_20230718` (PPM direct, full set)
-- `mhc2_msdb_2020_full_train_tune_ppm_recomputed_20230718` (PPM recomputed, full set) **[SOTA]**
+| Description                                | Location                                                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| PPM direct, representatives from nests     | `gs://biondeep-models/emmo/binding_predictor/mhc2_msdb_2020_nests_train_tune_ppm_direct_20230522`     |
+| PPM recomputed, representatives from nests | `gs://biondeep-models/emmo/binding_predictor/mhc2_msdb_2020_nests_train_tune_ppm_recomputed_20230522` |
+| PPM direct, full set                       | `gs://biondeep-models/emmo/binding_predictor/mhc2_msdb_2020_full_train_tune_ppm_direct_20230718`      |
+| PPM recomputed, full set **[SOTA]**        | `gs://biondeep-models/emmo/binding_predictor/mhc2_msdb_2020_full_train_tune_ppm_recomputed_20230718`  |
+
+After downloading a peptide-MHC2 binding prediction models using the `emmo pull-model` command, it
+is available in the folder `models/binding_predictor`.
+
+Example usage:
+
+```
+emmo pull-model --model_name gs://biondeep-models/emmo/binding_predictor/mhc2_msdb_2020_full_train_tune_ppm_recomputed_20230718
+```

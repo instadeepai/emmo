@@ -329,11 +329,10 @@ if __name__ == "__main__":
     directory = REPO_DIRECTORY / "validation" / "local"
     file = directory / f"{input_name}.txt"
     output_directory = directory / input_name
-    output_directory.mkdir(parents=True, exist_ok=True)
 
     sm = SequenceManager(file)
     em_runner = EMRunnerMHC1(sm, 9, 2)
-    em_runner.run(output_directory, output_all_runs=True)
+    em_runner.run(output_directory, output_all_runs=True, force=True)
 
     model = em_runner.best_model
     for length, weights in model.class_weights.items():

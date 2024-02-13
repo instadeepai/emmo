@@ -11,7 +11,7 @@ RUN apt update && \
 ENV APP_FOLDER=/app USER=app PYTHONPATH=$APP_FOLDER:$PYTHONPATH
 
 RUN groupadd --force --gid $HOST_GID $USER && \
-        useradd -r -m --uid $HOST_UID --gid $HOST_GID $USER
+    useradd -r -m --uid $HOST_UID --gid $HOST_GID $USER
 
 USER $USER
 
@@ -19,8 +19,12 @@ ENV PATH="/home/$USER/.local/bin:${PATH}"
 
 WORKDIR $APP_FOLDER
 
+# Install the app libraries
 COPY --chown=$USER requirements.txt /tmp/requirements.txt
-
 RUN pip install --upgrade --quiet pip && \
     pip install --no-cache-dir -r /tmp/requirements.txt && \
     rm -rf /tmp/*
+
+# Install the 'emmo' package
+COPY . .
+RUN pip install .

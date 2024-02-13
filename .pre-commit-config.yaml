@@ -69,7 +69,7 @@ repos:
           - --warn-unused-ignores
           - --warn-redundant-casts
           - --no-implicit-optional
-          - --strict-optional
+          - --no-strict-optional
           - --show-error-context
           - --ignore-missing-imports
           # cf https://github.com/python/mypy/issues/10632#issuecomment-1086711803

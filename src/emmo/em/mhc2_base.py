@@ -1,13 +1,15 @@
 """Base class for expectation-maximization-based deconvolution of MHC2 ligands."""
 from __future__ import annotations
 
-from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from cloudpathlib import AnyPath
 
+from emmo.io.file import Openable
+from emmo.io.file import save_csv
 from emmo.io.sequences import SequenceManager
 from emmo.models.deconvolution import DeconvolutionModelMHC2
 from emmo.resources.background_freqs import get_background
@@ -148,12 +150,13 @@ class BaseEMRunnerMHC2:
 
     def run(
         self,
-        output_directory: str | Path,
+        output_directory: Openable,
         output_all_runs: bool = False,
         n_runs: int = 5,
         random_seed: int = 0,
         min_error: float = 1e-3,
         pseudocount: float = 0.1,
+        force: bool = False,
     ) -> None:
         """Run the expectation-maximization algorithm.
 
@@ -168,6 +171,7 @@ class BaseEMRunnerMHC2:
             min_error: When the log likelihood difference between two steps becomes smaller than
                 this value, the EM run is finished.
             pseudocount: The pseudocounts to be used in the EM algorithm.
+            force: Overwrite files if they already exist.
         """
         print(
             f"--------------------------------------------------------------\n"
@@ -190,7 +194,7 @@ class BaseEMRunnerMHC2:
         self.min_error = min_error
         self.pseudocount = pseudocount
 
-        path = Path(output_directory)
+        path = AnyPath(output_directory)
 
         self.run_details: dict[str, list[Any]] = {
             "score": [],
@@ -245,9 +249,8 @@ class BaseEMRunnerMHC2:
 
             if output_all_runs:
                 path_i = path / f"run{run}"
-                path_i.mkdir(parents=True, exist_ok=True)
-                model.save(path_i)
-                self._write_responsibilities(path_i, self.responsibilities)
+                model.save(path_i, force=force)
+                self._write_responsibilities(path_i, self.responsibilities, force=force)
 
             if log_likelihood_pssm > self.best_score:
                 self.best_run = run
@@ -255,7 +258,7 @@ class BaseEMRunnerMHC2:
                 self.best_model = model
                 self.best_responsibilities = self.responsibilities
 
-        self.write_summary(path)
+        self.write_summary(path, force=force)
 
     def _current_state_to_model(self) -> DeconvolutionModelMHC2:
         """Collect current PPM and class weights into a model.
@@ -289,8 +292,9 @@ class BaseEMRunnerMHC2:
 
     def _write_responsibilities(
         self,
-        directory: str | Path,
+        directory: Openable,
         responsibilities: np.ndarray,
+        force: bool,
     ) -> None:
         """Write responsibility values to a file.
 
@@ -298,8 +302,9 @@ class BaseEMRunnerMHC2:
             directory: The output directory.
             responsibilities: The responsibility values to be written the file
                 'responsibilities.csv'.
+            force: Overwrite files if they already exist.
         """
-        directory = Path(directory)
+        directory = AnyPath(directory)
 
         # VARIANT 1: cumulated responsibilities (over all offsets)
         cum_responsibilities = np.sum(responsibilities, axis=2)
@@ -344,14 +349,15 @@ class BaseEMRunnerMHC2:
         # finally insert the peptide sequence as the first column
         df.insert(0, "peptide", self.sm.sequences)
 
-        df.to_csv(directory / "responsibilities.csv")
+        save_csv(df, directory / "responsibilities.csv", force=force)
 
-    def write_summary(self, directory: str | Path) -> None:
+    def write_summary(self, directory: Openable, force: bool = False) -> None:
         """Write the best model, responsibilities, and summary of runs.
 
         Args:
             directory: The output directory.
+            force: Overwrite files if they already exist.
         """
-        self.best_model.save(directory)
-        self._write_responsibilities(directory, self.best_responsibilities)
-        pd.DataFrame(self.run_details).to_csv(Path(directory) / "runs.csv")
+        self.best_model.save(directory, force=force)
+        self._write_responsibilities(directory, self.best_responsibilities, force=force)
+        save_csv(pd.DataFrame(self.run_details), AnyPath(directory) / "runs.csv", force=force)
