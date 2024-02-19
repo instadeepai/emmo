@@ -1,6 +1,7 @@
 # Project specific
 data/
 models/
+!emmo/models/
 validation/local
 *.csv
 .cache/
