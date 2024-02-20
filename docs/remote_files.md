@@ -1,7 +1,7 @@
 # Remote files support
 
-- All the functions defined in `src/emmo/io/file.py` allow to load and save files locally and
-  remotely on GCP: you can find
+- All the functions defined in `emmo/io/file.py` allow to load and save files locally and remotely
+  on GCP: you can find
   [here](<https://console.cloud.google.com/storage/browser?pageState=(%22StorageObjectListTable%22:(%22f%22:%22%255B%255D%22))&project=biontech-tcr&prefix=&forceOnObjectsSortingFiltering=false&forceOnBucketsSortingFiltering=true>)
   the list of buckets available.
 - It is done thanks to [cloudpathlib](https://cloudpathlib.drivendata.org/stable/) which allows to

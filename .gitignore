@@ -1,12 +1,16 @@
 # Project specific
 data/
 models/
+!emmo/models/
 validation/local
 *.csv
 .cache/
 .credentials/
 .env
 *.DS_Store
+
+# Test
+.coverage
 
 # Python
 __pycache__/

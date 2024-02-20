@@ -12,4 +12,4 @@
 !pyproject.toml
 
 # Source code
-!src/
+!emmo/

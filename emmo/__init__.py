@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 __version__ = "0.0.1"
 
 CURRENT_DIRECTORY = Path(__file__).resolve().parent
-REPO_DIRECTORY = CURRENT_DIRECTORY.parent.parent
+REPO_DIRECTORY = CURRENT_DIRECTORY.parent
 
 os.environ["REPO_DIRECTORY"] = str(REPO_DIRECTORY)
 
