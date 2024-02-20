@@ -6,7 +6,7 @@ ARG HOST_GID=1000
 ENV LANG=C.UTF-8
 
 RUN apt update && \
-    apt upgrade
+    apt upgrade -y
 
 ENV APP_FOLDER=/app USER=app PYTHONPATH=$APP_FOLDER:$PYTHONPATH
 
