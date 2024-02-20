@@ -9,6 +9,9 @@ validation/local
 .env
 *.DS_Store
 
+# Test
+.coverage
+
 # Python
 __pycache__/
 .idea/
