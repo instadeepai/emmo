@@ -1,36 +1,64 @@
 """Module for motif related functions."""
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import numpy as np
 
 from emmo.constants import AA2IDX
 from emmo.resources.background_freqs import get_background
 from emmo.resources.substitution_matrix import blosum62_matrix
 
+# ungapped lambda used by PSI-BLAST
+UNGAPPED_LAMBDA = 0.3176
 
-def _target_frequencies() -> np.ndarray:
-    """Compute the substitution target frequencies for pseudocount estimation.
 
-    These are necessary to compute the pseudocount frequencies.
+def count_amino_acids(sequences: str | Iterable[str]) -> list[int]:
+    """Count the occurrences of all standard amino acids.
+
+    Args:
+        sequences: One or multiple sequences consisting of the 20 standard amino acids.
+
+    Raises:
+        ValueError: If an unknown character occurs in a sequence.
 
     Returns:
-        Substitution target frequencies for pseudocount estimation.
-
-    References:
-        [1] Altschul, S.F., Madden, T.L., Schäffer, A.A., Zhang, J., Zhang, Z., Miller, W. &
-            Lipman, D.J. (1997) "Gapped BLAST and PSI-BLAST: a new generation of protein database
-            search programs." Nucleic Acids Res. 25:3389-3402.
-        [2] https://www.ncbi.nlm.nih.gov/BLAST/tutorial/Altschul-3.html
+        A list of amino acid counts.
     """
-    # ungapped lambda used by PSI-BLAST
-    lambda_u = 0.3176
+    if isinstance(sequences, str):
+        sequences = [sequences]
 
-    # background frequencies, this value must be the one corresponding to lambda_u, so do not
-    # change separately
-    p = get_background("psi_blast")
+    counts = len(AA2IDX) * [0]
 
-    # q_ij = p_i * p_j * e ^ (lambda_u * s_ij)
-    return p[:, np.newaxis] * p[np.newaxis, :] * np.exp(lambda_u * blosum62_matrix)
+    for seq in sequences:
+        for amino_acid in seq:
+            try:
+                counts[AA2IDX[amino_acid]] += 1
+            except KeyError:
+                raise ValueError(f"found unknown amino acid '{amino_acid}' in sequence: {seq}")
+
+    return counts
+
+
+def total_frequencies(sequences: str | Iterable[str]) -> np.array:
+    """Compute the total frequencies of all standard amino acids.
+
+    Args:
+        sequences: One or multiple sequences consisting of the 20 standard amino acids.
+
+    Raises:
+        ValueError: If the sum of all amino acid counts is zero.
+
+    Returns:
+        An array of amino acid frequencies.
+    """
+    counts = np.array(count_amino_acids(sequences), dtype=np.float64)
+    sum_ = counts.sum()
+
+    if sum_ <= 0.0:
+        raise ValueError("sum of all amino acid counts must be greater than zero")
+
+    return counts / sum_
 
 
 def pseudocount_frequencies(observed_frequencies: np.ndarray) -> np.ndarray:
@@ -67,7 +95,7 @@ def pseudocount_frequencies(observed_frequencies: np.ndarray) -> np.ndarray:
             g[k] = np.sum(observed_frequencies[k] * q / p, axis=1)
 
     else:
-        raise ValueError("only 1- or two dimensional array are supported")
+        raise ValueError("only 1- or 2-dimensional arrays are supported")
 
     return g
 
@@ -101,7 +129,7 @@ def position_probability_matrix(
     """Generate a position probability matrix from aligned (gapless) sequences.
 
     Args:
-        aligned_seqs: The aligned and gabless sequences.
+        aligned_seqs: The aligned and gapless sequences.
         use_pseudocounts: Whether to correct the probabilities with pseudocounts.
         pseudocount_beta: The weight of the pseudocounts.
 
@@ -151,14 +179,38 @@ def information_content(
     )
 
 
+def _target_frequencies() -> np.ndarray:
+    """Compute the substitution target frequencies for pseudocount estimation.
+
+    These are necessary to compute the pseudocount frequencies.
+
+    Returns:
+        Substitution target frequencies for pseudocount estimation.
+
+    References:
+        [1] Altschul, S.F., Madden, T.L., Schäffer, A.A., Zhang, J., Zhang, Z., Miller, W. &
+            Lipman, D.J. (1997) "Gapped BLAST and PSI-BLAST: a new generation of protein database
+            search programs." Nucleic Acids Res. 25:3389-3402.
+        [2] https://www.ncbi.nlm.nih.gov/BLAST/tutorial/Altschul-3.html
+    """
+    # background frequencies, this value must be the one corresponding to UNGAPPED_LAMBDA, so do
+    # not change separately
+    p = get_background("psi_blast")
+
+    # q_ij = p_i * p_j * e ^ (UNGAPPED_LAMBDA * s_ij)
+    return p[:, np.newaxis] * p[np.newaxis, :] * np.exp(UNGAPPED_LAMBDA * blosum62_matrix)
+
+
 if __name__ == "__main__":
-    q_ij = _target_frequencies()
+    TEST_SEQUENCES = [
+        "MADSRDPASD",
+        "QMQHWKEQRA",
+        "AQKADVLTTG",
+        "AGNPVGDKLN",
+        "VITVGPRGPL",
+        "LVQDVVFTDE",
+        "MAHFDRERIP",
+        "ERVVHAKGAG",
+    ]
 
-    print("The sum of the matrix elements should sum up to 1:\n", np.sum(q_ij))
-
-    test_frequencies = get_background("MHC1_biondeep")
-    test_frequencies[1] = 0
-
-    print("Test frequencies:\n", test_frequencies)
-
-    print("Pseudocount frequencies for MHC-I ligands:\n", pseudocount_frequencies(test_frequencies))
+    print(position_probability_matrix(TEST_SEQUENCES, use_pseudocounts=False).tolist())
