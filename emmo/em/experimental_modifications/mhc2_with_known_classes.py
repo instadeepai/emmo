@@ -9,7 +9,7 @@ import numpy as np
 
 from emmo.em.mhc2 import EMRunnerMHC2
 from emmo.io.file import Openable
-from emmo.io.sequences import SequenceManager
+from emmo.pipeline.sequences import SequenceManager
 
 
 class EMRunnerMHC2KnownClasses(EMRunnerMHC2):

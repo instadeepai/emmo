@@ -10,8 +10,8 @@ from cloudpathlib import AnyPath
 
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
-from emmo.io.sequences import SequenceManager
 from emmo.models.deconvolution import DeconvolutionModelMHC2NoOffsetWeights
+from emmo.pipeline.sequences import SequenceManager
 from emmo.resources.background_freqs import get_background
 from emmo.utils.statistics import compute_aic
 
@@ -633,6 +633,6 @@ if __name__ == "__main__":
     file = directory / f"{input_name}.txt"
     output_directory = directory / input_name
 
-    sm = SequenceManager(file)
+    sm = SequenceManager.load_from_txt(file)
     em_runner = VariableLengthEM(sm, 9, 2)
     em_runner.run(output_directory, output_all_runs=True, force=True)

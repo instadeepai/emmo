@@ -7,7 +7,7 @@ from cloudpathlib import AnyPath
 
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
-from emmo.io.sequences import SequenceManager
+from emmo.pipeline.sequences import SequenceManager
 
 
 def write_matrix(
@@ -81,13 +81,12 @@ def write_responsibilities(
         file_prefix: The file prefix.
         force: Overwrite the file if it already exists.
     """
-    sm = sequence_manager
     directory = AnyPath(directory)
 
     # collect the responsibilities
-    all_responsibilities = np.zeros((sm.number_of_sequences(), number_of_classes + 1))
+    all_responsibilities = np.zeros((sequence_manager.number_of_sequences(), number_of_classes + 1))
 
-    for i, (length, s) in enumerate(sm.order_in_input_file):
+    for i, (length, s) in enumerate(sequence_manager.order_in_input_file):
         all_responsibilities[i, :] = responsibilities[length][s, :]
 
     df = pd.DataFrame(
@@ -95,7 +94,7 @@ def write_responsibilities(
         columns=[f"class{i+1}" for i in range(number_of_classes)] + ["flat_motif"],
     )
 
-    df.insert(0, "peptide", sm.sequences)
+    df.insert(0, "peptide", sequence_manager.sequences)
     df["best_class"] = np.argmax(all_responsibilities, axis=1) + 1
     df.loc[(df["best_class"] == number_of_classes + 1), "best_class"] = "flat"
 

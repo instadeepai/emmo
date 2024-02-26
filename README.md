@@ -143,9 +143,8 @@ example):
 The following code snippet is an example of how to use the MHC2 motif deconvolution:
 
 ```python
-from emmo.io.sequences import SequenceManager
-from emmo.em.mhc2_tf import EMRunnerMHC2      # omit the '_tf' for the non-
-                                              # tensorflow version
+from emmo.pipeline.sequences import SequenceManager
+from emmo.em.mhc2_tf import EMRunnerMHC2   # omit the '_tf' for the non-tensorflow version
 
 INPUT_FILE = 'peptides.txt'
 OUTPUT_DIR = 'results'
@@ -153,18 +152,17 @@ MOTIF_LENGTH = 9
 MIN_CLASSES = 1   # minimal and
 MAX_CLASSES = 6   # maximal number of motifs to deconvolute
 
-sm = SequenceManager(INPUT_FILE)
+sequence_manager = SequenceManager.load_from_txt(INPUT_FILE)
 
 for i in range(MIN_CLASSES, MAX_CLASSES + 1):
     output_dir_i = OUTPUT_DIR / f'classes_{i}'
 
-    em_runner = EMRunnerMHC2(sm, MOTIF_LENGTH, i)
+    em_runner = EMRunnerMHC2(sequence_manager, MOTIF_LENGTH, i)
     em_runner.run(
         output_dir_i,
-        n_runs=20,              # number of runs (with different random
-                                # initializations)
-        output_all_runs=False,  # whether to write results for all runs or
-                                # just the best (highest log likelihood)
+        n_runs=20,              # number of runs (with different random initializations)
+        output_all_runs=False,  # whether to write results for all runs or just the best
+                                # (highest log likelihood)
     )
 ```
 

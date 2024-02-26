@@ -6,7 +6,7 @@ from itertools import product
 import numpy as np
 
 from emmo.em.mhc2_base import BaseEMRunnerMHC2
-from emmo.io.sequences import SequenceManager
+from emmo.pipeline.sequences import SequenceManager
 
 
 class EMRunnerMHC2(BaseEMRunnerMHC2):
@@ -208,6 +208,6 @@ if __name__ == "__main__":
     file = directory / f"{input_name}.txt"
     output_directory = directory / input_name
 
-    sm = SequenceManager(file)
+    sm = SequenceManager.load_from_txt(file)
     em_runner = EMRunnerMHC2(sm, 9, 2)
     em_runner.run(output_directory, output_all_runs=True, force=True)

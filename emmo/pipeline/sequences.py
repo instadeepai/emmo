@@ -14,86 +14,100 @@ from emmo.io.file import load_txt
 from emmo.io.file import Openable
 
 
-def _read_sequences(file_path: Openable) -> list[str]:
-    """Read sequences from a file.
-
-    Args:
-        file_path: The file path.
-
-    Returns:
-        The sequences.
-    """
-    return load_txt(file_path)
-
-
-def _read_sequences_with_class_information(
-    file_path: Openable, sequence_column: str, class_column: str
-) -> tuple[list[str], list[str]]:
-    """Read sequences with associated class.
-
-    The input file is expected to have at least the column containing the sequences and one
-    containing the classes.
-
-    Args:
-        file_path: The file path.
-        sequence_column: Name of the column containing the sequences.
-        class_column: Name of the column containing the associated classes.
-
-    Returns:
-        The sequences and their associated classes.
-    """
-    df = load_csv(file_path)
-    seqs = df[sequence_column].astype(str).tolist()
-    classes = df[class_column].astype(str).tolist()
-
-    return seqs, classes
-
-
 class SequenceManager:
     """Class for processing and organizing the input sequences."""
 
     def __init__(
         self,
-        file_path: Openable,
+        sequences: list[str],
         alphabet: str = "default",
-        sequence_column: str | None = None,
-        class_column: str | None = None,
+        classes: list[str] | None = None,
     ) -> None:
         """Initialize the SequenceManager class.
 
         Args:
-            file_path: The file path for the sequences.
+            sequences: The sequences.
             alphabet: The alphabet to use. Can be one of 'default' (natural amino acids), 'infer'
                 (use characters appearing in the input sequences), or a string containing the
                 characters explicitly.
-            sequence_column: If the sequences come with associated classes, the name of the column
-                with the sequences must be provided.
-            class_column: If the sequences come with associated classes, the name of the column
-                with the class information must be provided.
+            classes: A list containing the classes to which the each individual sequence belongs.
 
         Raises:
-            ValueError: If the sequence_column argument is required but not provided.
+            ValueError: If 'classes' are provided but the number of sequences and the length of the
+                'classes' list differ.
         """
-        if not class_column:
-            self.sequences = _read_sequences(file_path)
-            self.classes = None
-        else:
-            if not sequence_column:
-                raise ValueError("please also provide 'sequence_column' argument")
-            self.sequences, self.classes = _read_sequences_with_class_information(
-                file_path, sequence_column, class_column
-            )
+        self.sequences = sequences
+        self.classes = classes
+
+        if self.classes is not None:
+            if len(self.sequences) != len(self.classes):
+                raise ValueError("the sequence and classes lists must have the same length")
+
+        letters_in_sequences = {a for seq in self.sequences for a in seq}
 
         if alphabet == "default":
             self.alphabet = NATURAL_AAS
+            if not letters_in_sequences.issubset(set(NATURAL_AAS)):
+                raise ValueError(
+                    "the sequences contain letters that are not standard amino acids, use "
+                    "alphabet='infer' or provide a custom alphabet"
+                )
         elif alphabet == "infer":
-            self.alphabet = tuple(sorted({a for seq in self.sequences for a in seq}))
+            self.alphabet = tuple(sorted(letters_in_sequences))
         else:
             self.alphabet = tuple(sorted(alphabet))
+            if not letters_in_sequences.issubset(set(self.alphabet)):
+                raise ValueError(
+                    "the sequences contain letters that are not in the provided alphabet"
+                )
 
         self.aa2idx = {a: i for i, a in enumerate(self.alphabet)}
 
         self._similarity_weights: dict[int, np.ndarray] = {}
+
+    @classmethod
+    def load_from_txt(cls, file_path: Openable, alphabet: str = "default") -> SequenceManager:
+        """Read sequences from a text file.
+
+        Args:
+            file_path: The file path.
+            alphabet: The alphabet to use. Can be one of 'default' (natural amino acids), 'infer'
+                (use characters appearing in the input sequences), or a string containing the
+                characters explicitly.
+
+        Returns:
+            A sequence manager containing the loaded sequences.
+        """
+        sequences = load_txt(file_path)
+
+        return cls(sequences, alphabet=alphabet, classes=None)
+
+    @classmethod
+    def load_from_csv(
+        cls,
+        file_path: Openable,
+        sequence_column: str,
+        class_column: str | None = None,
+        alphabet: str = "default",
+    ) -> SequenceManager:
+        """Read sequences from a csv file, optianally with associated class information.
+
+        Args:
+            file_path: The path to the csv file.
+            sequence_column: The name of the column containing the sequences.
+            class_column: The name of the column containing the class information.
+            alphabet: The alphabet to use. Can be one of 'default' (natural amino acids), 'infer'
+                (use characters appearing in the input sequences), or a string containing the
+                characters explicitly.
+
+        Returns:
+            A sequence manager containing the loaded sequences and optianally the class information.
+        """
+        df = load_csv(file_path)
+        sequences = df[sequence_column].astype(str).tolist()
+        classes = df[class_column].astype(str).tolist() if class_column is not None else None
+
+        return cls(sequences, alphabet=alphabet, classes=classes)
 
     def number_of_sequences(self) -> int:
         """The total number of sequences.
@@ -140,7 +154,7 @@ class SequenceManager:
             The frequencies.
         """
         if not hasattr(self, "frequencies"):
-            count_aas = Counter(itertools.chain.from_iterable(seq for seq in sequences))
+            count_aas = Counter(itertools.chain.from_iterable(seq for seq in self.sequences))
             total = sum(count_aas.values())  # could be replaced by counter.total() in Python 3.10
             self.frequencies = np.array([count_aas[aa] for aa in self.alphabet]) / total
 
@@ -185,51 +199,6 @@ class SequenceManager:
 
         return self.size_sorted_classes
 
-    def _sort_by_size(self) -> None:
-        """Initialize the sequences and encoded sequences sorted by their lengths."""
-        self.size_sorted_seqs: dict[int, list[str]] = defaultdict(list)
-        if self.classes:
-            self.size_sorted_classes: dict[int, list[str]] = defaultdict(list)
-        self.order_in_input_file: list[tuple[int, int]] = []
-
-        for i, seq in enumerate(self.sequences):
-            length = len(seq)
-
-            self.order_in_input_file.append((length, len(self.size_sorted_seqs[length])))
-            self.size_sorted_seqs[length].append(seq)
-            if self.classes:
-                self.size_sorted_classes[length].append(self.classes[i])
-
-        self.size_sorted_arrays = {}
-
-        for length, seqs in self.size_sorted_seqs.items():
-            array = np.zeros((len(seqs), length), dtype=np.uint16)
-
-            for i, seq in enumerate(seqs):
-                for j, a in enumerate(seq):
-                    array[i, j] = self.aa2idx[a]
-
-            self.size_sorted_arrays[length] = array
-
-        self.min_length = min(self.size_sorted_seqs.keys())
-        self.max_length = max(self.size_sorted_seqs.keys())
-
-    def get_similarity_weights(self, k: int = 9) -> np.ndarray:
-        """The similarity weights for the sequences.
-
-        The more k-mers a sequence shares with other sequences, the lower its weight.
-
-        Args:
-            k: The k-mer length use in the sequence weight calculation.
-
-        Returns:
-            The sequence weights for the specified k-mer length.
-        """
-        if k not in self._similarity_weights:
-            self._similarity_weights[k] = similarity_weights(k, self.sequences)
-
-        return self._similarity_weights[k]
-
     def split_array_by_size(self, array: np.ndarray) -> dict[int, np.ndarray]:
         """Split an array by the length of the input sequences.
 
@@ -247,9 +216,7 @@ class SequenceManager:
             The array split by length of the sequences.
         """
         if len(array) != len(self.sequences):
-            raise ValueError(
-                "input must be an array with the same length as the list " "of sequences"
-            )
+            raise ValueError("input must be an array with the same length as the list of sequences")
 
         if not hasattr(self, "size_sorted_seqs"):
             self._sort_by_size()
@@ -281,6 +248,9 @@ class SequenceManager:
         Returns:
             The recombined array.
         """
+        if not hasattr(self, "size_sorted_seqs"):
+            self._sort_by_size()
+
         recombined_array = None
 
         for i, (length, s) in enumerate(self.order_in_input_file):
@@ -290,6 +260,51 @@ class SequenceManager:
             recombined_array[i, :] = split_array[length][s, :]
 
         return recombined_array
+
+    def get_similarity_weights(self, k: int = 9) -> np.ndarray:
+        """The similarity weights for the sequences.
+
+        The more k-mers a sequence shares with other sequences, the lower its weight.
+
+        Args:
+            k: The k-mer length use in the sequence weight calculation.
+
+        Returns:
+            The sequence weights for the specified k-mer length.
+        """
+        if k not in self._similarity_weights:
+            self._similarity_weights[k] = similarity_weights(k, self.sequences)
+
+        return self._similarity_weights[k]
+
+    def _sort_by_size(self) -> None:
+        """Initialize the sequences and encoded sequences sorted by their lengths."""
+        self.size_sorted_seqs: dict[int, list[str]] = defaultdict(list)
+        if self.classes:
+            self.size_sorted_classes: dict[int, list[str]] = defaultdict(list)
+        self.order_in_input_file: list[tuple[int, int]] = []
+
+        for i, seq in enumerate(self.sequences):
+            length = len(seq)
+
+            self.order_in_input_file.append((length, len(self.size_sorted_seqs[length])))
+            self.size_sorted_seqs[length].append(seq)
+            if self.classes:
+                self.size_sorted_classes[length].append(self.classes[i])
+
+        self.size_sorted_arrays = {}
+
+        for length, seqs in self.size_sorted_seqs.items():
+            array = np.zeros((len(seqs), length), dtype=np.uint16)
+
+            for i, seq in enumerate(seqs):
+                for j, a in enumerate(seq):
+                    array[i, j] = self.aa2idx[a]
+
+            self.size_sorted_arrays[length] = array
+
+        self.min_length = min(self.size_sorted_seqs.keys())
+        self.max_length = max(self.size_sorted_seqs.keys())
 
 
 def similarity_weights(k: int, sequences: list[str]) -> np.ndarray:
@@ -346,12 +361,3 @@ def count_k_mers(k: int, sequences: list[str]) -> dict[str, int]:
         The number of occurrences for all k-mers appearing in the sequences.
     """
     return dict(Counter(generate_k_mers(k, sequences)))
-
-
-if __name__ == "__main__":
-    sequences = ["ABCDEFGHIJKLMNOPQ", "HIJKLMNOPQRST", "STUVPXYZ01", "abc"]
-    counts = count_k_mers(9, sequences)
-    print(counts)
-
-    sw = similarity_weights(9, sequences)
-    print(sw)

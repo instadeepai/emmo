@@ -10,8 +10,8 @@ from cloudpathlib import AnyPath
 
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
-from emmo.io.sequences import SequenceManager
 from emmo.models.deconvolution import DeconvolutionModelMHC2
+from emmo.pipeline.sequences import SequenceManager
 from emmo.resources.background_freqs import get_background
 from emmo.utils.offsets import AlignedOffsets
 from emmo.utils.statistics import compute_aic

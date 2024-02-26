@@ -13,9 +13,9 @@ from emmo.io.file import load_json
 from emmo.io.file import Openable
 from emmo.io.file import save_json
 from emmo.io.output import write_matrix
-from emmo.io.sequences import SequenceManager
 from emmo.models.cleavage import CleavageModel
 from emmo.models.deconvolution import DeconvolutionModelMHC2 as Model
+from emmo.pipeline.sequences import SequenceManager
 from emmo.resources.background_freqs import get_background
 from emmo.resources.length_distribution import get_length_distribution
 from emmo.utils.motifs import information_content
@@ -238,7 +238,7 @@ class PredictorMHC2:
         if peptides_path:
             for file in AnyPath(peptides_path).iterdir():
                 allele = file.stem
-                sm = SequenceManager(file)
+                sm = SequenceManager.load_from_txt(file)
                 effective_peptide_counts_per_allele[allele] = np.sum(sm.get_similarity_weights())
         # newer models have the effective training peptide count in their associated training
         # parameters

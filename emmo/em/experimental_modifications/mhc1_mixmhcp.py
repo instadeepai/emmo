@@ -14,7 +14,7 @@ import numpy as np
 from emmo.io.file import Openable
 from emmo.io.output import write_matrices
 from emmo.io.output import write_responsibilities
-from emmo.io.sequences import SequenceManager
+from emmo.pipeline.sequences import SequenceManager
 from emmo.resources.background_freqs import get_background
 
 
@@ -530,7 +530,7 @@ if __name__ == "__main__":
     file = directory / f"{input_name}.txt"
     output_directory = directory / input_name
 
-    sm = SequenceManager(file)
+    sm = SequenceManager.load_from_txt(file)
     em_runner = FullEM(sm, 9, 2)
     em_runner.run()
 

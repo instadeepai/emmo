@@ -12,7 +12,7 @@ from emmo.utils.motifs import pseudocount_frequencies
 from emmo.utils.motifs import total_frequencies
 
 
-TEST_SEQUENCES: list[str] = [
+EXAMPLE_SEQUENCES: list[str] = [
     "MADSRDPASD",
     "QMQHWKEQRA",
     "AQKADVLTTG",
@@ -24,31 +24,13 @@ TEST_SEQUENCES: list[str] = [
 ]
 
 
-def test_target_frequencies() -> None:
-    """Ensure that values in '_target_frequencies()' sum up to 1."""
-    assert np.isclose(np.sum(_target_frequencies()), 1.0)
-
-
-def test_pseudocount_frequencies() -> None:
-    """Ensure that pseudocount_frequencies returns only non-zero values."""
-    example_freqs = get_background("MHC1_biondeep")
-
-    example_freqs[1] = 0
-    example_freqs[3] = 0
-    example_freqs[10] = 0
-
-    pseudocount_freqs = pseudocount_frequencies(example_freqs)
-
-    assert example_freqs.shape == pseudocount_freqs.shape
-    assert not (example_freqs > 0.0).all()
-    assert (pseudocount_freqs > 0.0).all()
-
-
+@pytest.fixture(scope="module")
 def expected_amino_acid_counts() -> list[int]:
     """Expected amino acid counts."""
     return [9, 0, 8, 4, 2, 7, 3, 2, 4, 4, 3, 2, 5, 5, 6, 2, 4, 9, 1, 0]
 
 
+@pytest.fixture(scope="module")
 def expected_amino_acid_frequencies() -> list[float]:
     """Expected amino acid frequencies."""
     return [
@@ -75,6 +57,7 @@ def expected_amino_acid_frequencies() -> list[float]:
     ]
 
 
+@pytest.fixture()
 def expected_position_probability_matrix() -> list[list[float]]:
     """Expected position probability matrix."""
     return [
@@ -301,10 +284,32 @@ def expected_position_probability_matrix() -> list[list[float]]:
     ]
 
 
-@pytest.mark.parametrize("sequences", [TEST_SEQUENCES, "".join(TEST_SEQUENCES)])
-def test_count_amino_acids(sequences: str | list[str]) -> None:
+def test_target_frequencies() -> None:
+    """Ensure that values in '_target_frequencies()' sum up to 1."""
+    assert np.isclose(np.sum(_target_frequencies()), 1.0)
+
+
+def test_pseudocount_frequencies() -> None:
+    """Ensure that pseudocount_frequencies returns only non-zero values."""
+    example_freqs = get_background("MHC1_biondeep")
+
+    example_freqs[1] = 0
+    example_freqs[3] = 0
+    example_freqs[10] = 0
+
+    pseudocount_freqs = pseudocount_frequencies(example_freqs)
+
+    assert example_freqs.shape == pseudocount_freqs.shape
+    assert not (example_freqs > 0.0).all()
+    assert (pseudocount_freqs > 0.0).all()
+
+
+@pytest.mark.parametrize("sequences", [EXAMPLE_SEQUENCES, "".join(EXAMPLE_SEQUENCES)])
+def test_count_amino_acids(
+    sequences: str | list[str], expected_amino_acid_counts: list[int]
+) -> None:
     """Test the 'expected_amino_acid_counts' function."""
-    assert count_amino_acids(sequences) == expected_amino_acid_counts()
+    assert count_amino_acids(sequences) == expected_amino_acid_counts
 
 
 def test_count_amino_acids_with_invalid_amino_acid() -> None:
@@ -315,10 +320,12 @@ def test_count_amino_acids_with_invalid_amino_acid() -> None:
         count_amino_acids(sequences)
 
 
-@pytest.mark.parametrize("sequences", [TEST_SEQUENCES, "".join(TEST_SEQUENCES)])
-def test_total_frequencies(sequences: str | list[str]) -> None:
+@pytest.mark.parametrize("sequences", [EXAMPLE_SEQUENCES, "".join(EXAMPLE_SEQUENCES)])
+def test_total_frequencies(
+    sequences: str | list[str], expected_amino_acid_frequencies: list[float]
+) -> None:
     """Test the 'expected_amino_acid_counts' function."""
-    assert np.allclose(total_frequencies(sequences), expected_amino_acid_frequencies())
+    assert np.allclose(total_frequencies(sequences), expected_amino_acid_frequencies)
 
 
 @pytest.mark.parametrize(
@@ -339,9 +346,11 @@ def test_total_frequencies_with_invalid_input(sequences: str | list[str], match:
         total_frequencies(sequences)
 
 
-def test_total_position_probability_matrix() -> None:
+def test_total_position_probability_matrix(
+    expected_position_probability_matrix: list[list[float]],
+) -> None:
     """Test the 'position_probability_matrix' function."""
     assert np.allclose(
-        position_probability_matrix(TEST_SEQUENCES, use_pseudocounts=False),
-        expected_position_probability_matrix(),
+        position_probability_matrix(EXAMPLE_SEQUENCES, use_pseudocounts=False),
+        expected_position_probability_matrix,
     )
