@@ -9,6 +9,7 @@ import numpy as np
 
 from emmo.em.mhc2 import EMRunnerMHC2
 from emmo.io.file import Openable
+from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
 
 
@@ -20,7 +21,7 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
         sequence_manager: SequenceManager,
         motif_length: int,
         number_of_classes: int,
-        background: str = "MHC2_biondeep",
+        background: BackgroundType,
     ) -> None:
         """Initialize the MHC2 EM runner base class with given class initialization.
 
@@ -31,8 +32,8 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
             motif_length: The length of the motif(s) to be estimated.
             number_of_classes: The number of motifs/classes to be identified (not counting the flat
                 motif).
-            background: The background amino acid frequencies. Must be a string corresponding to
-                one of the available backgrounds.
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
 
         Raises:
             ValueError: If the minimal sequence length is shorter than the specified motif length.
@@ -42,7 +43,7 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
             sequence_manager,
             motif_length,
             number_of_classes,
-            background=background,
+            background,
         )
 
         if self.sm.classes is None:

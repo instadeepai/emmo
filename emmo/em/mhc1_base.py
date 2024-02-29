@@ -134,6 +134,7 @@ class BaseEMRunnerMHC1:
             f"--------------------------------------------------------------\n"
             f"Running EM algorithm with {self.number_of_classes} classes\n"
             f"--------------------------------------------------------------\n"
+            f"Motif length: {self.motif_length}\n"
             f"Total number of peptides: {len(self.sm.sequences)}\n"
             f"Number of runs: {n_runs}\n"
             f"Log likelihood difference for stopping: {min_error}\n"

@@ -2,7 +2,7 @@
 from emmo.constants import NATURAL_AAS
 from emmo.constants import REPO_DIRECTORY
 from emmo.io.external_tool_parsing import parse_from_mhcmotifviewer
-from emmo.resources.background_freqs import get_background
+from emmo.pipeline.background import Background
 from emmo.simulation.sequence_mixer import equal_length_frequencies
 
 
@@ -13,7 +13,7 @@ out_dir.mkdir(parents=True, exist_ok=True)
 freq_matrices = [
     parse_from_mhcmotifviewer(PWMs / "HLA-A0101-PWM.txt", as_frequencies=True),
     parse_from_mhcmotifviewer(PWMs / "HLA-A0218-PWM.txt", as_frequencies=True),
-    get_background(which="uniprot"),
+    Background("uniprot").frequencies,
 ]
 
 weights = [0.5, 0.3, 0.2]

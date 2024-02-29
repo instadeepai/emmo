@@ -157,7 +157,7 @@ sequence_manager = SequenceManager.load_from_txt(INPUT_FILE)
 for i in range(MIN_CLASSES, MAX_CLASSES + 1):
     output_dir_i = OUTPUT_DIR / f'classes_{i}'
 
-    em_runner = EMRunnerMHC2(sequence_manager, MOTIF_LENGTH, i)
+    em_runner = EMRunnerMHC2(sequence_manager, MOTIF_LENGTH, i, 'MHC2_biondeep')
     em_runner.run(
         output_dir_i,
         n_runs=20,              # number of runs (with different random initializations)

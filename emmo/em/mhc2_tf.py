@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from emmo.em.mhc2_base import BaseEMRunnerMHC2
+from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
 
 
@@ -370,7 +371,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
         sequence_manager: SequenceManager,
         motif_length: int,
         number_of_classes: int,
-        background: str = "MHC2_biondeep",
+        background: BackgroundType,
         tf_precision: str = "float64",
     ) -> None:
         """Initialize the MHC2 EM runner (tensorflow version).
@@ -380,8 +381,8 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             motif_length: The length of the motif(s) to be estimated.
             number_of_classes: The number of motifs/classes to be identified (not counting the flat
                 motif).
-            background: The background amino acid frequencies. Must be a string corresponding to
-                one of the available backgrounds.
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
             tf_precision: Float precision to be used for the tensorflow-based operations.
 
         Raises:
@@ -391,7 +392,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             sequence_manager,
             motif_length,
             number_of_classes,
-            background=background,
+            background,
         )
 
         if tf_precision == "float64":
@@ -403,8 +404,8 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
 
         # Broadcast background frequencies version for concatenation.
         self.background_freqs_broadcast = tf.broadcast_to(
-            tf.constant(self.background_freqs, dtype=self.tf_precision),
-            shape=(1, self.motif_length, self.background_freqs.shape[0]),
+            tf.constant(self.background.frequencies, dtype=self.tf_precision),
+            shape=(1, self.motif_length, self.background.frequencies.shape[0]),
         )
 
         # Convert similarity and offset weights to tf.Tensor
@@ -545,5 +546,5 @@ if __name__ == "__main__":
     output_directory = directory / input_name
 
     sm = SequenceManager.load_from_txt(file)
-    em_runner = EMRunnerMHC2(sm, 9, 2, tf_precision="float64")
+    em_runner = EMRunnerMHC2(sm, 9, 2, "MHC2_biondeep", tf_precision="float64")
     em_runner.run(output_directory, output_all_runs=True, force=True)

@@ -15,13 +15,17 @@ from emmo.io.file import save_json
 from emmo.io.output import write_matrix
 from emmo.models.cleavage import CleavageModel
 from emmo.models.deconvolution import DeconvolutionModelMHC2 as Model
+from emmo.pipeline.background import Background
+from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
-from emmo.resources.background_freqs import get_background
 from emmo.resources.length_distribution import get_length_distribution
+from emmo.utils import logger
 from emmo.utils.motifs import information_content
 from emmo.utils.motifs import position_probability_matrix
 from emmo.utils.offsets import AlignedOffsets
 from emmo.utils.sequence_distance import nearest_neighbors
+
+log = logger.get(__name__)
 
 
 class PredictorMHC2:
@@ -33,8 +37,8 @@ class PredictorMHC2:
         ppms: dict[str, np.ndarray],
         cleavage_model_path: Openable,
         offset_weights: np.ndarray,
+        background: BackgroundType,
         motif_length: int = 9,
-        background: str = "MHC2_biondeep",
         length_distribution: dict[int, float] | str = "MHC2_biondeep",
     ) -> None:
         """Initialize the predictor.
@@ -44,17 +48,16 @@ class PredictorMHC2:
             ppms: The position probability matrices.
             cleavage_model_path: Path to the cleavage model.
             offset_weights: Offset weights.
-            motif_length: Motif length. Defaults to 9.
             background: The background amino acid frequencies. Must be a string corresponding to
                 one of the available backgrounds.
+            motif_length: Motif length.
             length_distribution: The length distribution of the ligands. Must be a string
                 corresponding to one of the available distributions.
         """
         self.alphabet = alphabet
         self.alphabet_index = {a: i for i, a in enumerate(alphabet)}
 
-        self.background = background
-        self._background_freqs = get_background(background)
+        self.background = Background(background)
 
         self.ppms = ppms
         self.available_alleles = sorted(self.ppms)
@@ -97,11 +100,20 @@ class PredictorMHC2:
             int(length): x for length, x in model_specs["length_distribution"].items()
         }
 
+        if "background" not in model_specs:
+            default_background = "MHC2_biondeep"
+            log.info(
+                "Loading model without saved background, "
+                f"will use default '{default_background}' for older models"
+            )
+            model_specs["background"] = default_background
+
         return cls(
             model_specs["alphabet"],
             ppms,
             directory / "cleavage",
             np.asarray(model_specs["offset_weights"]),
+            model_specs["background"],
             motif_length=model_specs["motif_length"],
             length_distribution=length_distribution,
         )
@@ -111,9 +123,9 @@ class PredictorMHC2:
         cls,
         selected_models: dict[str, tuple[Openable, int, int]],
         cleavage_model_path: Openable,
+        background: BackgroundType,
         peptides_path: Openable | None = None,
         motif_length: int = 9,
-        background: str = "MHC2_biondeep",
         length_distribution: str = "MHC2_biondeep",
         recompute_ppms_from_best_responsibility: bool = False,
     ) -> PredictorMHC2:
@@ -125,11 +137,11 @@ class PredictorMHC2:
                 containing the results for different numbers of classes, the number of classes to
                 be used and the 1-based index of the class within this model to be used.
             cleavage_model_path: The path to the cleavage model.
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
             peptides_path: The directory containing the peptide files. This is only needed for
                 older deconvolution models that did not save the 'training_params'.
             motif_length: The motif length.
-            background: The background amino acid frequencies. Must be a string corresponding to
-                one of the available backgrounds.
             length_distribution: The length distribution of the ligands. Must be a string
                 corresponding to  one of the available distributions.
             recompute_ppms_from_best_responsibility: Whether to recompute the PPMs from the core
@@ -145,7 +157,7 @@ class PredictorMHC2:
             try:
                 loaded_binding_models[allele] = Model.load(path / f"classes_{k}")
             except FileNotFoundError:
-                # compatibility with older runs
+                # backward compatibility: older runs do not have the underscore
                 loaded_binding_models[allele] = Model.load(path / f"clusters{k}")
 
         if recompute_ppms_from_best_responsibility:
@@ -165,8 +177,8 @@ class PredictorMHC2:
             ppms,
             cleavage_model_path,
             averaged_offset_weights,
+            background,
             motif_length=motif_length,
-            background=background,
             length_distribution=length_distribution,
         )
 
@@ -289,6 +301,7 @@ class PredictorMHC2:
         model_specs = {
             x: self.__dict__[x] for x in ["alphabet", "motif_length", "length_distribution"]
         }
+        model_specs["background"] = self.background.get_representation()
         model_specs["offset_weights"] = self.offset_weights.tolist()
 
         save_json(model_specs, directory / "model_specs.json", force=force)
@@ -328,6 +341,7 @@ class PredictorMHC2:
         score = 0.0
         best_prob = float("-inf")
         best_offset = -1
+        bg_freqs = self.background.frequencies
 
         for i, o in enumerate(self.aligned_offsets.get_offset_list(len(peptide))):
             # if peptide is longer than max_sequence_length, the following could happen
@@ -342,7 +356,7 @@ class PredictorMHC2:
             ]
 
             if use_background:
-                prob = np.array([ppm[k, a] / self._background_freqs[a] for k, a in aa_indices])
+                prob = np.array([ppm[k, a] / bg_freqs[a] for k, a in aa_indices])
             else:
                 prob = np.array([ppm[k, a] for k, a in aa_indices])
 
@@ -464,7 +478,7 @@ class PredictorMHC2:
         info_content_lookup = {
             allele: [
                 (
-                    information_content(ppm, self._background_freqs)
+                    information_content(ppm, self.background.frequencies)
                     if use_information_content
                     else None
                 )

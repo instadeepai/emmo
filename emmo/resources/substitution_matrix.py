@@ -3,7 +3,7 @@ import numpy as np
 
 
 # BLOSUM62 substitution matrix (amino acids alphabetically sorted)
-blosum62_matrix = np.array(
+BLOSUM62_MATRIX = np.array(
     [
         [4, 0, -2, -1, -2, 0, -2, -1, -1, -1, -1, -2, -1, -1, -1, 1, 0, 0, -3, -2],
         [0, 9, -3, -4, -2, -3, -3, -1, -3, -1, -1, -3, -3, -3, -3, -1, -1, -1, -2, -2],

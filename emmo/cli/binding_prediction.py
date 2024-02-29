@@ -1,6 +1,7 @@
 """Command line tools for binding prediction."""
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
 
 import click
 from cloudpathlib import AnyPath
@@ -99,7 +100,7 @@ def predict_mhc2(
     input_file: Path | CloudPath,
     output_file: Path | CloudPath,
     model: str,
-    model_name: Optional[str],
+    model_name: str | None,
     peptide_column: str,
     allele_alpha_column: str,
     allele_beta_column: str,

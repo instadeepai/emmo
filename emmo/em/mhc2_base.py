@@ -11,8 +11,9 @@ from cloudpathlib import AnyPath
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
 from emmo.models.deconvolution import DeconvolutionModelMHC2
+from emmo.pipeline.background import Background
+from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
-from emmo.resources.background_freqs import get_background
 from emmo.utils.offsets import AlignedOffsets
 from emmo.utils.statistics import compute_aic
 
@@ -25,7 +26,7 @@ class BaseEMRunnerMHC2:
         sequence_manager: SequenceManager,
         motif_length: int,
         number_of_classes: int,
-        background: str = "MHC2_biondeep",
+        background: BackgroundType,
     ) -> None:
         """Initialize the MHC2 EM runner base class.
 
@@ -34,7 +35,7 @@ class BaseEMRunnerMHC2:
             motif_length: The length of the motif(s) to be estimated.
             number_of_classes: The number of motifs/classes to be identified (not counting the flat
                 motif).
-            background: The background amino acid frequencies. Must be a string corresponding to
+            background: The background amino acid frequencies. Can also be a string corresponding to
                 one of the available backgrounds.
 
         Raises:
@@ -65,8 +66,7 @@ class BaseEMRunnerMHC2:
         self.n_offsets = self.aligned_offsets.get_number_of_offsets()
 
         # background amino acid distribution
-        self.background = background
-        self.background_freqs = get_background(which=background)
+        self.background = Background(background)
 
         self._compute_similarity_weights()
 
@@ -177,6 +177,8 @@ class BaseEMRunnerMHC2:
             f"--------------------------------------------------------------\n"
             f"Running EM algorithm with {self.number_of_classes} classes\n"
             f"--------------------------------------------------------------\n"
+            f"Motif length: {self.motif_length}\n"
+            f"Background: {self.background.get_representation()}\n"
             f"Total number of peptides: {len(self.sm.sequences)}\n"
             f"Effective number of peptides (sum of weights): "
             f"{self.sum_of_weights}\n"
@@ -271,8 +273,8 @@ class BaseEMRunnerMHC2:
             self.motif_length,
             self.number_of_classes,
             self.sm.get_maximal_length(),
+            self.background,
             has_flat_motif=True,
-            background=self.background,
         )
 
         model.ppm = self.ppm

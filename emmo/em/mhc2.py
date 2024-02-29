@@ -6,6 +6,7 @@ from itertools import product
 import numpy as np
 
 from emmo.em.mhc2_base import BaseEMRunnerMHC2
+from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
 
 
@@ -17,7 +18,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
         sequence_manager: SequenceManager,
         motif_length: int,
         number_of_classes: int,
-        background: str = "MHC2_biondeep",
+        background: BackgroundType,
     ) -> None:
         """Initialize the MHC2 EM runner.
 
@@ -25,14 +26,14 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             sequence_manager: The instance holding the input sequences.
             motif_length: The length of the motif(s) to be estimated.
             number_of_classes: The number of motifs to be identified (not counting the flat motif).
-            background: The background amino acid frequencies. Must be a string corresponding to
-                one of the available backgrounds.
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
         """
         super().__init__(
             sequence_manager,
             motif_length,
             number_of_classes,
-            background=background,
+            background,
         )
 
         self.offset_list_by_length = {
@@ -52,13 +53,13 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
         # position probability matrices
         self.PPM = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
         # the last class is the flat motif which remains unchanged
-        self.PPM[self.number_of_classes] = self.background_freqs
+        self.PPM[self.number_of_classes] = self.background.frequencies
 
         # position-specific scoring matrix
         # in the expectation step and for the log likehood, we do not use the raw frequencies but
         # divide them by the background frequencies, we pre-compute these "scores" after the
         # maximization step to save time
-        self.PSSM = self.PPM / self.background_freqs
+        self.PSSM = self.PPM / self.background.frequencies
 
         # probalitities of the classes and offsets
         self.class_weights = np.zeros((self.n_classes, self.n_offsets))
@@ -169,7 +170,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
         )
 
         self.PSSM[: self.number_of_classes] = (
-            self.PPM[: self.number_of_classes] / self.background_freqs
+            self.PPM[: self.number_of_classes] / self.background.frequencies
         )
 
         # upweight the middle offset
@@ -209,5 +210,5 @@ if __name__ == "__main__":
     output_directory = directory / input_name
 
     sm = SequenceManager.load_from_txt(file)
-    em_runner = EMRunnerMHC2(sm, 9, 2)
+    em_runner = EMRunnerMHC2(sm, 9, 2, "MHC2_biondeep")
     em_runner.run(output_directory, output_all_runs=True, force=True)

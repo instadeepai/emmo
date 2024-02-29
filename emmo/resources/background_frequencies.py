@@ -1,5 +1,8 @@
 """Module containing the background frequencies."""
+from __future__ import annotations
+
 import numpy as np
+
 
 # from https://github.com/GfellerLab/MixMHCp, needs to be re-checked
 BACKGROUND_UNIPROT = {
@@ -102,11 +105,11 @@ BACKGROUND_PSI_BLAST = {
 }
 
 
-def get_background(which: str = "uniprot") -> np.ndarray:
+def get_background(name: str) -> np.ndarray:
     """Get the background distribution.
 
     Args:
-        which: The name of the background distribution.
+        name: The name of the background distribution.
 
     Raises:
         ValueError: If the specified name is not available.
@@ -114,25 +117,20 @@ def get_background(which: str = "uniprot") -> np.ndarray:
     Returns:
         The background distribution.
     """
-    if which == "uniprot":
+    if name == "uniprot":
         freqs = BACKGROUND_UNIPROT
-    elif which == "MHC1_biondeep":
-        freqs = BACKGROUND_MS_MHC1_DATA
-    elif which == "MHC2_biondeep":
-        freqs = BACKGROUND_MS_MHC2_DATA
-    elif which == "psi_blast":
+    elif name == "psi_blast":
         freqs = BACKGROUND_PSI_BLAST
+    elif name == "MHC1_biondeep":
+        freqs = BACKGROUND_MS_MHC1_DATA
+    elif name == "MHC2_biondeep":
+        freqs = BACKGROUND_MS_MHC2_DATA
     else:
-        raise ValueError(f"background '{which}' is not available")
+        raise ValueError(f"background '{name}' is not available")
 
-    background = np.asarray([freqs[a] for a in sorted(freqs.keys())])
+    background = np.asarray([freqs[a] for a in sorted(freqs.keys())], dtype=np.float64)
 
     # make sure frequencies sum to 1
     background /= np.sum(background)
 
     return background
-
-
-if __name__ == "__main__":
-    print(get_background(which="uniprot"))
-    print(get_background(which="MHC2_biondeep"))

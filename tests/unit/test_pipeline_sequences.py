@@ -1,4 +1,4 @@
-"""Test cases for the utils sequences functions."""
+"""Test cases for the pipeline sequences functions."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,21 +10,6 @@ import pytest
 from emmo.constants import NATURAL_AAS
 from emmo.io.file import save_txt
 from emmo.pipeline.sequences import SequenceManager
-
-
-@pytest.fixture(scope="module")
-def example_sequences() -> list[str]:
-    """Test sequences."""
-    return [
-        "MADSRDPASD",
-        "QMQHWKEQRAAQ",
-        "KADVLT",
-        "TGAGNPVGDKLN",
-        "VITVGPRGPL",
-        "LVQDVVFTDEMA",
-        "HFDRERIP",
-        "ERVVHAKGAG",
-    ]
 
 
 @pytest.fixture()
@@ -74,33 +59,6 @@ def expected_indices() -> list[list[int]]:
         [9, 17, 13, 2, 17, 17, 4, 16, 2, 3, 10, 0],
         [6, 4, 2, 14, 3, 14, 7, 12],
         [3, 14, 17, 17, 6, 0, 8, 5, 0, 5],
-    ]
-
-
-@pytest.fixture(scope="module")
-def expected_amino_acid_frequencies() -> list[float]:
-    """Expected amino acid frequencies."""
-    return [
-        0.1125,
-        0.0,
-        0.1,
-        0.05,
-        0.025,
-        0.0875,
-        0.0375,
-        0.025,
-        0.05,
-        0.05,
-        0.0375,
-        0.025,
-        0.0625,
-        0.0625,
-        0.075,
-        0.025,
-        0.05,
-        0.1125,
-        0.0125,
-        0.0,
     ]
 
 

@@ -6,8 +6,8 @@ from collections.abc import Iterable
 import numpy as np
 
 from emmo.constants import AA2IDX
-from emmo.resources.background_freqs import get_background
-from emmo.resources.substitution_matrix import blosum62_matrix
+from emmo.resources.background_frequencies import get_background
+from emmo.resources.substitution_matrix import BLOSUM62_MATRIX
 
 # ungapped lambda used by PSI-BLAST
 UNGAPPED_LAMBDA = 0.3176
@@ -106,7 +106,7 @@ def frequencies_corrected_with_pseudocounts(
     """Estimate the amino acid frequencies using pseudocounts.
 
     Args:
-        observed_frequencies: Observed amino acid frequecies.
+        observed_frequencies: Observed amino acid frequencies.
         alpha: Weight for the observed frequencies.
         beta: Weight for the pseudocount frequencies.
 
@@ -198,19 +198,4 @@ def _target_frequencies() -> np.ndarray:
     p = get_background("psi_blast")
 
     # q_ij = p_i * p_j * e ^ (UNGAPPED_LAMBDA * s_ij)
-    return p[:, np.newaxis] * p[np.newaxis, :] * np.exp(UNGAPPED_LAMBDA * blosum62_matrix)
-
-
-if __name__ == "__main__":
-    TEST_SEQUENCES = [
-        "MADSRDPASD",
-        "QMQHWKEQRA",
-        "AQKADVLTTG",
-        "AGNPVGDKLN",
-        "VITVGPRGPL",
-        "LVQDVVFTDE",
-        "MAHFDRERIP",
-        "ERVVHAKGAG",
-    ]
-
-    print(position_probability_matrix(TEST_SEQUENCES, use_pseudocounts=False).tolist())
+    return p[:, np.newaxis] * p[np.newaxis, :] * np.exp(UNGAPPED_LAMBDA * BLOSUM62_MATRIX)

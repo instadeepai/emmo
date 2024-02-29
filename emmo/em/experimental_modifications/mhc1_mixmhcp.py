@@ -14,8 +14,8 @@ import numpy as np
 from emmo.io.file import Openable
 from emmo.io.output import write_matrices
 from emmo.io.output import write_responsibilities
+from emmo.pipeline.background import Background
 from emmo.pipeline.sequences import SequenceManager
-from emmo.resources.background_freqs import get_background
 
 
 PSEUDO_COUNT_PRIOR = 0.1
@@ -48,7 +48,7 @@ class EqualLengthEM:
         self.n_sequences = sequences.shape[0]
         self.n_motif = sequences.shape[1]
 
-        self.b = get_background(which="uniprot")
+        self.b = Background("uniprot").frequencies
 
     def run(self, n_runs: int = 5, random_seed: int = 0) -> None:
         """Run the expectation-maximization algorithm.

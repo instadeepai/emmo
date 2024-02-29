@@ -11,8 +11,9 @@ from cloudpathlib import AnyPath
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
 from emmo.models.deconvolution import DeconvolutionModelMHC2NoOffsetWeights
+from emmo.pipeline.background import Background
+from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
-from emmo.resources.background_freqs import get_background
 from emmo.utils.statistics import compute_aic
 
 
@@ -168,7 +169,11 @@ class VariableLengthEM:
     """Class for processing all different length."""
 
     def __init__(
-        self, sequence_manager: SequenceManager, motif_length: int, number_of_classes: int
+        self,
+        sequence_manager: SequenceManager,
+        motif_length: int,
+        number_of_classes: int,
+        background: BackgroundType,
     ) -> None:
         """Initialize the VariableLengthEM class.
 
@@ -177,6 +182,8 @@ class VariableLengthEM:
             motif_length: The length of the motif(s) to be estimated.
             number_of_classes: The number of motifs/classes to be identified (not counting the flat
                 motif).
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
         """
         self.sm = sequence_manager
 
@@ -188,7 +195,7 @@ class VariableLengthEM:
 
         self.motif_length = motif_length
 
-        self.background_freqs = get_background(which="MHC2_biondeep")
+        self.background = Background(background)
 
         self._compute_similarity_weights()
 
@@ -454,21 +461,21 @@ class VariableLengthEM:
             self.sm.alphabet,
             self.motif_length,
             self.number_of_classes,
+            self.background,
             has_flat_motif=True,
-            background="MHC2_biondeep",
         )
 
         # position probability matrices
         self.ppm = self.model.ppm
 
         # the last class is the flat motif which remains unchanged
-        self.ppm[self.number_of_classes] = self.background_freqs
+        self.ppm[self.number_of_classes] = self.background.frequencies
 
         # in the expectation step and for the log likehood, we do not use the raw frequencies but
         # divide them by the background frequencies, we pre-compute these "scores" after the
         # maximization step to save time
         self.pssm = self.model.pssm
-        self.pssm[:] = self.ppm / self.background_freqs
+        self.pssm[:] = self.ppm / self.background.frequencies
 
         # probalitities of the classes
         self.class_weights = self.model.class_weights
@@ -521,7 +528,7 @@ class VariableLengthEM:
         )
 
         self.pssm[: self.number_of_classes] = (
-            self.ppm[: self.number_of_classes] / self.background_freqs
+            self.ppm[: self.number_of_classes] / self.background.frequencies
         )
 
         # normalize so that class weights sum to one
@@ -631,8 +638,8 @@ if __name__ == "__main__":
     input_name = "HLA-A0101_A0218_background_class_II"
     directory = REPO_DIRECTORY / "validation" / "local"
     file = directory / f"{input_name}.txt"
-    output_directory = directory / input_name
+    output_directory = directory / f"{input_name}_no_class_weights"
 
     sm = SequenceManager.load_from_txt(file)
-    em_runner = VariableLengthEM(sm, 9, 2)
+    em_runner = VariableLengthEM(sm, 9, 2, "MHC2_biondeep")
     em_runner.run(output_directory, output_all_runs=True, force=True)

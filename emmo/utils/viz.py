@@ -10,7 +10,8 @@ import pandas as pd
 from emmo.constants import NATURAL_AAS
 from emmo.models.cleavage import CleavageModel
 from emmo.models.deconvolution import DeconvolutionModelMHC2
-from emmo.resources.background_freqs import get_background
+from emmo.pipeline.background import Background
+from emmo.pipeline.background import BackgroundType
 
 
 LOGO_PROPS = {"fade_below": 0.5, "shade_below": 0.5}
@@ -19,7 +20,7 @@ LOGO_PROPS = {"fade_below": 0.5, "shade_below": 0.5}
 def plot_single_ppm(
     ppm: np.ndarray,
     alphabet: list[str] | tuple[str, ...] | None = None,
-    background: str | None = None,
+    background: BackgroundType | None = None,
     ax: matplotlib.axes._axes.Axes | None = None,
 ) -> None:
     """Plot a position probability matrix.
@@ -44,7 +45,7 @@ def plot_single_ppm(
     if background is not None:
         _df = lm.transform_matrix(
             _df,
-            background=get_background(which=background),
+            background=Background(background).frequencies,
             from_type="probability",
             to_type="information",
         )
@@ -55,7 +56,6 @@ def plot_single_ppm(
 def plot_mhc2_model(
     model: DeconvolutionModelMHC2,
     title: str = "",
-    background: str = "MHC2_biondeep",
     axs: matplotlib.axes._axes.Axes | np.ndarray[matplotlib.axes._axes.Axes] | None = None,
 ) -> None:
     """Plot an MHC2 deconvolution model.
@@ -63,14 +63,13 @@ def plot_mhc2_model(
     Args:
         model: The model.
         title: The title for the plot.
-        background: The background amino acid frequencies to be used.
         axs: If provided, the Axes instance(s) used for plotting.
     """
     if axs is None:
         number_of_classes = model.number_of_classes
         _, axs = plt.subplots(1, number_of_classes, figsize=(6 * number_of_classes, 4))
 
-    _plot_mhc2_model_to_axes(model, title, background, axs)
+    _plot_mhc2_model_to_axes(model, title, axs)
     plt.tight_layout()
     plt.show()
 
@@ -78,7 +77,6 @@ def plot_mhc2_model(
 def _plot_mhc2_model_to_axes(
     model: DeconvolutionModelMHC2,
     title: str,
-    background: str,
     axs: matplotlib.axes._axes.Axes | np.ndarray,
 ) -> None:
     """Plot an MHC2 deconvolution model using the given Axes instance(s).
@@ -86,7 +84,6 @@ def _plot_mhc2_model_to_axes(
     Args:
         model: The model.
         title: The title for the plot.
-        background: The background amino acid frequencies to be used.
         axs: The Axes instance(s) used for plotting.
 
     Raises:
@@ -109,7 +106,7 @@ def _plot_mhc2_model_to_axes(
         plot_single_ppm(
             model.ppm[i],
             alphabet=tuple(model.alphabet),
-            background=background,
+            background=model.background,
             ax=ax,
         )
 
@@ -121,12 +118,11 @@ def _plot_mhc2_model_to_axes(
         ax.set_title(title_to_write)
 
 
-def plot_cleavage_model(model: CleavageModel, background: str = "MHC2_biondeep") -> None:
+def plot_cleavage_model(model: CleavageModel) -> None:
     """Plot a cleavage model.
 
     Args:
         model: The cleavage model.
-        background: The background amino acid frequencies to be used.
     """
     number_of_classes = model.number_of_classes
 
@@ -147,7 +143,7 @@ def plot_cleavage_model(model: CleavageModel, background: str = "MHC2_biondeep")
             plot_single_ppm(
                 ppm[j],
                 alphabet=tuple(model.alphabet),
-                background=background,
+                background=model.background,
                 ax=ax,
             )
 

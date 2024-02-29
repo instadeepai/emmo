@@ -14,7 +14,8 @@ from emmo.io.file import Openable
 from emmo.io.file import save_csv
 from emmo.io.file import save_json
 from emmo.io.output import write_matrices
-from emmo.resources.background_freqs import get_background
+from emmo.pipeline.background import Background
+from emmo.pipeline.background import BackgroundType
 from emmo.utils.exceptions import NotFittedError
 from emmo.utils.offsets import AlignedOffsets
 
@@ -189,8 +190,8 @@ class DeconvolutionModelMHC2:
         motif_length: int,
         number_of_classes: int,
         max_sequence_length: int,
+        background: BackgroundType,
         has_flat_motif: bool = True,
-        background: str = "MHC2_biondeep",
     ) -> None:
         """Initialize the MHC2 deconvolution model.
 
@@ -202,9 +203,9 @@ class DeconvolutionModelMHC2:
             motif_length: Motif length.
             number_of_classes: Number of motifs/classes (excl. the flat motif).
             max_sequence_length: Maximal sequence length.
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
             has_flat_motif: Whether the model includes a flat motif.
-            background: The background amino acid frequencies. Must be a string corresponding to
-                one of the available backgrounds.
         """
         self.alphabet = alphabet
         self.n_alphabet = len(alphabet)
@@ -217,10 +218,9 @@ class DeconvolutionModelMHC2:
 
         self.max_sequence_length = max_sequence_length
 
-        self.has_flat_motif = has_flat_motif
+        self.background = Background(background)
 
-        self.background = background
-        self.background_freqs = get_background(background)
+        self.has_flat_motif = has_flat_motif
 
         self.aligned_offsets = AlignedOffsets(motif_length, max_sequence_length)
         self.n_offsets = self.aligned_offsets.get_number_of_offsets()
@@ -249,8 +249,8 @@ class DeconvolutionModelMHC2:
             model_specs["motif_length"],
             model_specs["number_of_classes"],
             model_specs["max_sequence_length"],
-            model_specs["has_flat_motif"],
             model_specs["background"],
+            has_flat_motif=model_specs["has_flat_motif"],
         )
 
         if "training_params" in model_specs:
@@ -305,10 +305,10 @@ class DeconvolutionModelMHC2:
                 "number_of_classes",
                 "max_sequence_length",
                 "has_flat_motif",
-                "background",
                 "training_params",
             ]
         }
+        model_specs["background"] = self.background.get_representation()
 
         save_json(model_specs, directory / "model_specs.json", force=force)
 
@@ -338,7 +338,7 @@ class DeconvolutionModelMHC2:
 
     def recompute_pssm(self) -> None:
         """Update the PSSMs using the current PPMs and the background."""
-        self.pssm[:] = self.ppm / self.background_freqs
+        self.pssm[:] = self.ppm / self.background.frequencies
 
     def get_offset_list(self, length: int) -> list[int]:
         """List of valid aligned offsets for a specified length.
@@ -440,8 +440,8 @@ class DeconvolutionModelMHC2NoOffsetWeights:
         alphabet: str | tuple[str, ...] | list[str],
         motif_length: int,
         number_of_classes: int,
+        background: BackgroundType,
         has_flat_motif: bool = True,
-        background: str = "MHC2_biondeep",
     ) -> None:
         """Initialize the MHC2 deconvolution model.
 
@@ -452,9 +452,9 @@ class DeconvolutionModelMHC2NoOffsetWeights:
             alphabet: The (amino acid) alphabet.
             motif_length: Motif length.
             number_of_classes: Number of motifs/classes (excl. the flat motif).
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
             has_flat_motif: Whether the model includes a flat motif.
-            background: The background amino acid frequencies. Must be a string corresponding to
-                one of the available backgrounds.
         """
         self.alphabet = alphabet
         self.n_alphabet = len(alphabet)
@@ -465,10 +465,9 @@ class DeconvolutionModelMHC2NoOffsetWeights:
         self.number_of_classes = number_of_classes
         self.n_classes = number_of_classes + (1 if has_flat_motif else 0)
 
-        self.has_flat_motif = has_flat_motif
+        self.background = Background(background)
 
-        self.background = background
-        self.background_freqs = get_background(background)
+        self.has_flat_motif = has_flat_motif
 
         self.is_fitted = False
 
@@ -492,8 +491,8 @@ class DeconvolutionModelMHC2NoOffsetWeights:
             model_specs["alphabet"],
             model_specs["motif_length"],
             model_specs["number_of_classes"],
-            model_specs["has_flat_motif"],
             model_specs["background"],
+            has_flat_motif=model_specs["has_flat_motif"],
         )
 
         n = model_specs["number_of_classes"]
@@ -547,9 +546,9 @@ class DeconvolutionModelMHC2NoOffsetWeights:
                 "motif_length",
                 "number_of_classes",
                 "has_flat_motif",
-                "background",
             ]
         }
+        model_specs["background"] = self.background.get_representation()
 
         save_json(model_specs, directory / "model_specs.json", force=force)
 
@@ -580,7 +579,7 @@ class DeconvolutionModelMHC2NoOffsetWeights:
 
     def recompute_pssm(self) -> None:
         """Update the PSSMs using the current PPMs and the background."""
-        self.pssm[:] = self.ppm / self.background_freqs
+        self.pssm[:] = self.ppm / self.background.frequencies
 
     def get_number_of_parameters(self) -> int:
         """Return the number of parameters (frequencies and class priors).

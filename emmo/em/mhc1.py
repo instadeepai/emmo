@@ -23,8 +23,8 @@ import itertools
 import numpy as np
 
 from emmo.em.mhc1_base import BaseEMRunnerMHC1
+from emmo.pipeline.background import Background
 from emmo.pipeline.sequences import SequenceManager
-from emmo.resources.background_freqs import get_background
 
 
 class EMRunnerMHC1(BaseEMRunnerMHC1):
@@ -75,8 +75,9 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
             steps.
         """
         self.ppm = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
+
         # the last class is the flat motif which remains unchanged
-        self.ppm[self.number_of_classes] = get_background(which="uniprot")
+        self.ppm[self.number_of_classes] = Background("uniprot").frequencies
 
         self.responsibilities_by_length = self.sm.split_array_by_size(
             self._initialize_responsibilities()

@@ -1,6 +1,7 @@
 """Command line tools for deconvolution."""
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -79,6 +80,7 @@ def common_parameters(func: Callable) -> Callable:
             "output directory already exists."
         ),
     )
+    @functools.wraps(func)
     def _wrapper(*args: Any, **kwargs: Any) -> Any:
         return func(*args, **kwargs)
 
@@ -101,10 +103,19 @@ def common_parameters(func: Callable) -> Callable:
     required=True,
     help="Local or remote output directory.",
 )
+@click.option(
+    "--background_frequencies",
+    "-b",
+    type=str,
+    required=False,
+    default="MHC2_biondeep",
+    help="The background frequencies to be used.",
+)
 @common_parameters
 def deconvolute_mhc2(
     input_file: Path | CloudPath,
     output_directory: Path | CloudPath,
+    background_frequencies: str,
     motif_length: int,
     min_classes: int,
     max_classes: int,
@@ -128,6 +139,7 @@ def deconvolute_mhc2(
     _run_deconvolutions_per_peptide_list(
         sequence_manager,
         output_directory,
+        background_frequencies,
         motif_length,
         min_classes,
         max_classes,
@@ -141,6 +153,7 @@ def deconvolute_mhc2(
 def _run_deconvolutions_per_peptide_list(
     sequence_manager: SequenceManager,
     output_directory: Path | CloudPath,
+    background_frequencies: str,
     motif_length: int,
     min_classes: int,
     max_classes: int,
@@ -162,7 +175,7 @@ def _run_deconvolutions_per_peptide_list(
     for i in range(min_classes, max_classes + 1):
         output_dir_i = output_directory / f"classes_{i}"
 
-        em_runner = runner_class(sequence_manager, motif_length, i)
+        em_runner = runner_class(sequence_manager, motif_length, i, background_frequencies)
         em_runner.run(
             output_dir_i, n_runs=number_of_runs, output_all_runs=output_all_runs, force=force
         )
