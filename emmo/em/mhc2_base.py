@@ -67,7 +67,7 @@ class BaseEMRunnerMHC2(BaseRunner):
 
         # compute similarity weights and correction factor for the middle offset
         self._compute_similarity_weights()
-        log.info(f"Effective number of sequences: total, {self.sum_of_weights:4f}")
+        log.info(f"Effective number of sequences: {self.sum_of_weights:4f}")
         log.info(f"Upweighting middle offset by factor {self.upweight_middle_offset:4f}")
 
     def _compute_similarity_weights(self) -> None:

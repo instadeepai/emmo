@@ -38,7 +38,7 @@ class BaseRunner(ABC):
         """
         log.info(
             f"Initializing {type(self).__name__} (motif length {motif_length}, "
-            f"number of classes {number_of_classes})"
+            f"{number_of_classes} class{'es' if number_of_classes != 1 else ''})"
         )
 
         self.sm = sequence_manager
@@ -133,9 +133,8 @@ class BaseRunner(ABC):
 
             log.info(
                 f"{self.number_of_classes} class{'es' if self.number_of_classes != 1 else ''}, "
-                f"run {run}/{self.n_runs} finished "
-                f"({self.current_steps} EM steps, {elapsed_time:.4f} seconds, "
-                f"score = {self.current_score})"
+                f"run {run}/{self.n_runs} done "
+                f"({self.current_steps} steps, {elapsed_time:.4f} s, score = {self.current_score})"
             )
 
             model = self._current_state_to_model()
@@ -156,7 +155,7 @@ class BaseRunner(ABC):
 
         log.info(
             f"Finished {n_runs} run{'s' if n_runs != 1 else ''} "
-            f"(best run is {self.best_run}, score = {self.best_score})"
+            f"(best run: {self.best_run}, score = {self.best_score})"
         )
 
         self.write_summary(path, force=force)

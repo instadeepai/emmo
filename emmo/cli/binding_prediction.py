@@ -11,7 +11,8 @@ from emmo.constants import MODELS_DIRECTORY
 from emmo.io.file import load_csv
 from emmo.io.file import save_csv
 from emmo.models.prediction import PredictorMHC2
-from emmo.utils.click import abort_if_not_exists
+from emmo.utils.click import arguments
+from emmo.utils.click import callback
 
 
 @click.command()
@@ -19,7 +20,7 @@ from emmo.utils.click import abort_if_not_exists
     "--input_file",
     "-i",
     type=AnyPath,
-    callback=abort_if_not_exists,
+    callback=callback.abort_if_not_exists,
     required=True,
     help="Path to remote or local input CSV file.",
 )
@@ -51,27 +52,7 @@ from emmo.utils.click import abort_if_not_exists
         "If this is not provided, the name of the model directory is used."
     ),
 )
-@click.option(
-    "--peptide_column",
-    type=str,
-    required=False,
-    default="peptide",
-    help="The name of column in the csv file containing the peptide.",
-)
-@click.option(
-    "--allele_alpha_column",
-    type=str,
-    required=False,
-    default="allele_alpha",
-    help="The name of column in the csv file containing the alpha chain.",
-)
-@click.option(
-    "--allele_beta_column",
-    type=str,
-    required=False,
-    default="allele_beta",
-    help="The name of column in the csv file containing the beta chain.",
-)
+@arguments.peptide_and_allele_columns_mhc2
 @click.option(
     "--force",
     is_flag=True,
