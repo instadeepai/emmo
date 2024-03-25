@@ -1,24 +1,27 @@
 """Base class for expectation-maximization-based deconvolution of MHC2 ligands."""
 from __future__ import annotations
 
-from time import perf_counter
-from typing import Any
+from abc import abstractmethod
 
 import numpy as np
 import pandas as pd
 from cloudpathlib import AnyPath
 
+from emmo.em.base_runner import BaseRunner
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
 from emmo.models.deconvolution import DeconvolutionModelMHC2
 from emmo.pipeline.background import Background
 from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
+from emmo.utils import logger
 from emmo.utils.offsets import AlignedOffsets
 from emmo.utils.statistics import compute_aic
 
+log = logger.get(__name__)
 
-class BaseEMRunnerMHC2:
+
+class BaseEMRunnerMHC2(BaseRunner):
     """Base class for running MHC2 expectation maximization algorithms."""
 
     def __init__(
@@ -41,24 +44,16 @@ class BaseEMRunnerMHC2:
         Raises:
             ValueError: If the minimal sequence length is shorter than the specified motif length.
         """
-        self.sm = sequence_manager
+        super().__init__(sequence_manager, motif_length, number_of_classes)
 
-        self.sequences = self.sm.sequences_as_indices()
-        self.n_sequences = len(self.sequences)
-
-        # number of classes (excluding the flat motif)
-        self.number_of_classes = number_of_classes
-
-        # we additionally want a flat motif
-        self.n_classes = number_of_classes + 1
-
-        self.motif_length = motif_length
-        self.n_alphabet = len(self.sm.alphabet)
+        self.best_model: DeconvolutionModelMHC2 | None = None
+        self.current_pssm: np.ndarray | None = None
+        self.current_class_weights: np.ndarray | None = None
+        self.current_log_likelihood_ppm: float = float("-inf")
 
         if self.sm.get_minimal_length() < self.motif_length:
             raise ValueError(
-                f"input contains sequences that are shorter than "
-                f"motif length {self.motif_length}"
+                f"input contains sequences that are shorter than motif length {self.motif_length}"
             )
 
         # auxiliary class for aligning offsets
@@ -67,8 +62,13 @@ class BaseEMRunnerMHC2:
 
         # background amino acid distribution
         self.background = Background(background)
+        background_name = self.background.name if self.background.name else "custom"
+        log.info(f"Using background frequencies: {background_name}")
 
+        # compute similarity weights and correction factor for the middle offset
         self._compute_similarity_weights()
+        log.info(f"Effective number of sequences: total, {self.sum_of_weights:4f}")
+        log.info(f"Upweighting middle offset by factor {self.upweight_middle_offset:4f}")
 
     def _compute_similarity_weights(self) -> None:
         """Compute the similarity weights.
@@ -131,136 +131,32 @@ class BaseEMRunnerMHC2:
 
         return _responsibilities
 
-    def _expectation_maximization(
-        self,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, np.ndarray, int,]:
+    @abstractmethod
+    def _expectation_maximization(self) -> None:
         """Do one expectation-maximization run.
 
-        Raises:
-            NotImplementedError: If the method is called for the base class or the child class does
-                not override this method.
-
-        Returns:
-            The class weights, PPM, PSSM, log likelihood (using PSSM), log likelihood (using PPM),
-            responsibilities, and EM steps.
+        Does one EM run until convergence and sets at least the following attributes:
+        - self.current_class_weights
+        - self.current_ppm
+        - self.current_score
+        - self.current_responsibilities
+        - self.current_steps
+        - self.current_pssm
+        - self.current_log_likelihood_ppm
         """
-        raise NotImplementedError(
-            "Expectation-maximzation algorithm must be implemented by the child classes"
-        )
 
-    def run(
-        self,
-        output_directory: Openable,
-        output_all_runs: bool = False,
-        n_runs: int = 5,
-        random_seed: int = 0,
-        min_error: float = 1e-3,
-        pseudocount: float = 0.1,
-        force: bool = False,
-    ) -> None:
-        """Run the expectation-maximization algorithm.
+    def _runner_specific_run_details(self, num_of_parameters: int) -> None:
+        """Add the runner-specific information to the 'run_details' dictionary.
 
         Args:
-            output_directory: The output directory. The best model is written directly into this
-                directory as well a summary of the runs. The models from the other runs are
-                optionally written to subdirectories.
-            output_all_runs: Whether all models obtained by the individual runs shall be returned
-                (or only that of the best run).
-            n_runs: Number of EM runs.
-            random_seed: The random seed to be used for initializing the EM runs.
-            min_error: When the log likelihood difference between two steps becomes smaller than
-                this value, the EM run is finished.
-            pseudocount: The pseudocounts to be used in the EM algorithm.
-            force: Overwrite files if they already exist.
+            num_of_parameters: Number of model parameters.
         """
-        print(
-            f"--------------------------------------------------------------\n"
-            f"Running EM algorithm with {self.number_of_classes} classes\n"
-            f"--------------------------------------------------------------\n"
-            f"Motif length: {self.motif_length}\n"
-            f"Background: {self.background.get_representation()}\n"
-            f"Total number of peptides: {len(self.sm.sequences)}\n"
-            f"Effective number of peptides (sum of weights): "
-            f"{self.sum_of_weights}\n"
-            f"Upweighting middle offset by factor: "
-            f"{self.upweight_middle_offset}\n"
-            f"Number of runs: {n_runs}\n"
-            f"Log likelihood difference for stopping: {min_error}\n"
-            f"Random seed: {random_seed}\n"
-            f"Pseudocount: {pseudocount}\n"
-            f"--------------------------------------------------------------"
+        self.run_details["score"].append(self.current_score)
+        self.run_details["log_likelihood"].append(self.current_log_likelihood_ppm)
+        self.run_details["AIC_PPM"].append(
+            compute_aic(num_of_parameters, self.current_log_likelihood_ppm)
         )
-
-        self.n_runs = n_runs
-        self.random_seed = random_seed
-        self.min_error = min_error
-        self.pseudocount = pseudocount
-
-        path = AnyPath(output_directory)
-
-        self.run_details: dict[str, list[Any]] = {
-            "score": [],
-            "log_likelihood": [],
-            "AIC_PPM": [],
-            "AIC_PSSM": [],
-            "EM_steps": [],
-            "time": [],
-        }
-
-        # random number generator
-        self.rng = np.random.default_rng(self.random_seed)
-
-        self.best_run = None
-        self.best_score = float("-inf")
-
-        for run in range(self.n_runs):
-            self.current_run = run
-            start_time = perf_counter()
-
-            (
-                self.class_weights,
-                self.ppm,
-                self.pssm,
-                log_likelihood_pssm,
-                log_likelihood_ppm,
-                self.responsibilities,
-                steps,
-            ) = self._expectation_maximization()
-
-            model = self._current_state_to_model()
-            elapsed_time = perf_counter() - start_time
-
-            print(
-                f"Estimating frequencies (run {run:2}), "
-                f"{steps:4} EM steps, "
-                f"score = {log_likelihood_pssm} ... "
-                f"finished {self.sm.number_of_sequences()} "
-                f"sequences in {elapsed_time:.4f} seconds."
-            )
-
-            self.run_details["score"].append(log_likelihood_pssm)
-            self.run_details["log_likelihood"].append(log_likelihood_ppm)
-            self.run_details["AIC_PPM"].append(
-                compute_aic(model.get_number_of_parameters(), log_likelihood_ppm)
-            )
-            self.run_details["AIC_PSSM"].append(
-                compute_aic(model.get_number_of_parameters(), log_likelihood_pssm)
-            )
-            self.run_details["EM_steps"].append(steps)
-            self.run_details["time"].append(elapsed_time)
-
-            if output_all_runs:
-                path_i = path / f"run{run}"
-                model.save(path_i, force=force)
-                self._write_responsibilities(path_i, self.responsibilities, force=force)
-
-            if log_likelihood_pssm > self.best_score:
-                self.best_run = run
-                self.best_score = log_likelihood_pssm
-                self.best_model = model
-                self.best_responsibilities = self.responsibilities
-
-        self.write_summary(path, force=force)
+        self.run_details["AIC_PSSM"].append(compute_aic(num_of_parameters, self.current_score))
 
     def _current_state_to_model(self) -> DeconvolutionModelMHC2:
         """Collect current PPM and class weights into a model.
@@ -277,9 +173,9 @@ class BaseEMRunnerMHC2:
             has_flat_motif=True,
         )
 
-        model.ppm = self.ppm
-        model.pssm = self.pssm
-        model.class_weights = self.class_weights
+        model.ppm = self.current_ppm
+        model.pssm = self.current_pssm
+        model.class_weights = self.current_class_weights
         model.is_fitted = True
 
         model.training_params["total_peptide_number"] = len(self.sm.sequences)
@@ -352,14 +248,3 @@ class BaseEMRunnerMHC2:
         df.insert(0, "peptide", self.sm.sequences)
 
         save_csv(df, directory / "responsibilities.csv", force=force)
-
-    def write_summary(self, directory: Openable, force: bool = False) -> None:
-        """Write the best model, responsibilities, and summary of runs.
-
-        Args:
-            directory: The output directory.
-            force: Overwrite files if they already exist.
-        """
-        self.best_model.save(directory, force=force)
-        self._write_responsibilities(directory, self.best_responsibilities, force=force)
-        save_csv(pd.DataFrame(self.run_details), AnyPath(directory) / "runs.csv", force=force)

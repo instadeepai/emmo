@@ -295,7 +295,7 @@ class VariableLengthEM:
             self.model.is_fitted = True
 
             log_likelihood = self._log_likelihood()
-            aic = compute_aic(self.model.get_number_of_parameters(), log_likelihood)
+            aic = compute_aic(self.model.num_of_parameters, log_likelihood)
 
             elapsed_time = perf_counter() - start_time
             print(
@@ -430,7 +430,7 @@ class VariableLengthEM:
         self.model.is_fitted = True
 
         log_likelihood = self._log_likelihood()
-        aic = compute_aic(self.model.get_number_of_parameters(), log_likelihood)
+        aic = compute_aic(self.model.num_of_parameters, log_likelihood)
 
         elapsed_time = perf_counter() - start_time
         print(

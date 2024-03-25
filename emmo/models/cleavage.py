@@ -62,6 +62,26 @@ class CleavageModel:
 
         self._initialize_arrays()
 
+    @property
+    def num_of_parameters(self) -> int:
+        """Number of model parameters (frequencies and class priors).
+
+        Returns:
+            The number of model parameters.
+        """
+        # class weight incl. flat motif (subtract 1 because weights sum to one, times 2 for N- and
+        # C-terminus)
+        count = 2 * (self.n_classes - 1)
+
+        # frequencies summed over all other classes (subtract 1 because aa frequencies sum to one)
+        count += (
+            self.number_of_classes
+            * (self.n_terminus_length + self.c_terminus_length)
+            * (self.n_alphabet - 1)
+        )
+
+        return count
+
     @classmethod
     def load(cls, directory: Openable) -> CleavageModel:
         """Load a model from a directory.
@@ -280,25 +300,6 @@ class CleavageModel:
         """Update the PSSMs using the current PPMs and the background."""
         self.pssm_n[:] = self.ppm_n / self.background.frequencies
         self.pssm_c[:] = self.ppm_c / self.background.frequencies
-
-    def get_number_of_parameters(self) -> int:
-        """Return the number of parameters (frequencies and class priors).
-
-        Returns:
-            The number of parameters.
-        """
-        # class weight incl. flat motif (subtract 1 because weights sum to one, times 2 for N- and
-        # C-terminus)
-        count = 2 * (self.n_classes - 1)
-
-        # frequencies summed over all other classes (subtract 1 because aa frequencies sum to one)
-        count += (
-            self.number_of_classes
-            * (self.n_terminus_length + self.c_terminus_length)
-            * (self.n_alphabet - 1)
-        )
-
-        return count
 
     def score_peptide(self, peptide: str, include_flat: bool = True) -> float:
         """Score a peptide with this model.

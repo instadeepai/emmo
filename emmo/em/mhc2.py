@@ -41,28 +41,31 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             for length in self.similarity_weights_by_length
         }
 
-    def _expectation_maximization(
-        self,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, np.ndarray, int,]:
+    def _expectation_maximization(self) -> None:
         """Do one expectation-maximization run.
 
-        Returns:
-            The class weights, PPM, PSSM, log likelihood (using PSSM), log likelihood (using PPM),
-            responsibilities, and EM steps.
+        Does one EM run until convergence and sets at least the following attributes:
+        - self.current_class_weights
+        - self.current_ppm
+        - self.current_score
+        - self.current_responsibilities
+        - self.current_steps
+        - self.current_pssm
+        - self.current_log_likelihood_ppm
         """
         # position probability matrices
-        self.PPM = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
+        self.current_ppm = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
         # the last class is the flat motif which remains unchanged
-        self.PPM[self.number_of_classes] = self.background.frequencies
+        self.current_ppm[self.number_of_classes] = self.background.frequencies
 
         # position-specific scoring matrix
         # in the expectation step and for the log likehood, we do not use the raw frequencies but
         # divide them by the background frequencies, we pre-compute these "scores" after the
         # maximization step to save time
-        self.PSSM = self.PPM / self.background.frequencies
+        self.current_pssm = self.current_ppm / self.background.frequencies
 
         # probalitities of the classes and offsets
-        self.class_weights = np.zeros((self.n_classes, self.n_offsets))
+        self.current_class_weights = np.zeros((self.n_classes, self.n_offsets))
 
         self.responsibilities_by_length = self.sm.split_array_by_size(
             self._initialize_responsibilities()
@@ -95,15 +98,12 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
 
         log_likelihood_ppm = self._log_likelihood(use_pssm=False)
 
-        return (
-            self.class_weights,
-            self.PPM,
-            self.PSSM,
-            log_likelihood_pssm,
-            log_likelihood_ppm,
-            self.sm.recombine_split_array(self.responsibilities_by_length),
-            steps,
+        self.current_score = log_likelihood_pssm
+        self.current_responsibilities = self.sm.recombine_split_array(
+            self.responsibilities_by_length
         )
+        self.current_steps = steps
+        self.current_log_likelihood_ppm = log_likelihood_ppm
 
     def _log_likelihood(self, use_pssm: bool = False) -> float:
         """Log likelihood given the current parameters.
@@ -117,7 +117,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
         Returns:
             Log likelihood.
         """
-        matrix = self.PSSM if use_pssm else self.PPM
+        matrix = self.current_pssm if use_pssm else self.current_ppm
         log_likelihood = 0.0
         for length, sequences in self.sm.get_size_sorted_arrays().items():
             n_sequences = sequences.shape[0]
@@ -129,7 +129,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             for s, c, (i, o) in product(
                 range(n_sequences), range(self.n_classes), enumerate(offset_list)
             ):
-                prob = self.class_weights[c, o]
+                prob = self.current_class_weights[c, o]
                 for k in range(self.motif_length):
                     prob *= matrix[c, k, sequences[s, i + k]]
                 p[s] += prob
@@ -138,14 +138,16 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
 
         # at the moment, we use pseudocount as a constant exponent of the Dirichlet priors, hence
         # we can do the following
-        log_likelihood += self.pseudocount * np.sum(np.log(self.PPM[: self.number_of_classes]))
+        log_likelihood += self.pseudocount * np.sum(
+            np.log(self.current_ppm[: self.number_of_classes])
+        )
 
         return log_likelihood
 
     def _maximization(self) -> None:
         """Maximization step."""
-        self.PPM[: self.number_of_classes] = self.pseudocount
-        self.class_weights[:] = 0
+        self.current_ppm[: self.number_of_classes] = self.pseudocount
+        self.current_class_weights[:] = 0
 
         for length, sequences in self.sm.get_size_sorted_arrays().items():
             n_sequences = sequences.shape[0]
@@ -158,28 +160,30 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             ):
                 resp = responsibilities[s, c, o] * similarity_weights[s]
                 for k in range(self.motif_length):
-                    self.PPM[c, k, sequences[s, i + k]] += resp
+                    self.current_ppm[c, k, sequences[s, i + k]] += resp
 
-            self.class_weights[:] += np.sum(
+            self.current_class_weights[:] += np.sum(
                 responsibilities * similarity_weights[:, np.newaxis, np.newaxis], axis=0
             )
 
         # normalize so that frequencies sum to one for each position
-        self.PPM[: self.number_of_classes] /= np.sum(
-            self.PPM[: self.number_of_classes], axis=2, keepdims=True
+        self.current_ppm[: self.number_of_classes] /= np.sum(
+            self.current_ppm[: self.number_of_classes], axis=2, keepdims=True
         )
 
-        self.PSSM[: self.number_of_classes] = (
-            self.PPM[: self.number_of_classes] / self.background.frequencies
+        self.current_pssm[: self.number_of_classes] = (
+            self.current_ppm[: self.number_of_classes] / self.background.frequencies
         )
 
         # upweight the middle offset
-        self.class_weights[:, self.class_weights.shape[1] // 2] *= self.upweight_middle_offset
+        self.current_class_weights[
+            :, self.current_class_weights.shape[1] // 2
+        ] *= self.upweight_middle_offset
 
-        self.class_weights[:] += self.pseudocount
+        self.current_class_weights[:] += self.pseudocount
 
         # normalize so that class weights sum to one
-        self.class_weights /= np.sum(self.class_weights)
+        self.current_class_weights /= np.sum(self.current_class_weights)
 
     def _expectation(self) -> None:
         """Expectation step."""
@@ -193,9 +197,9 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             for s, c, (i, o) in product(
                 range(n_sequences), range(self.n_classes), enumerate(offset_list)
             ):
-                prob = self.class_weights[c, o]
+                prob = self.current_class_weights[c, o]
                 for k in range(self.motif_length):
-                    prob *= self.PSSM[c, k, sequences[s, i + k]]
+                    prob *= self.current_pssm[c, k, sequences[s, i + k]]
                 responsibilities[s, c, o] = prob
 
             responsibilities /= np.sum(responsibilities, axis=(1, 2), keepdims=True)

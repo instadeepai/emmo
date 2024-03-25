@@ -65,19 +65,20 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
             c_term_penalty=c_term_penalty,
         )
 
-    def _expectation_maximization(
-        self,
-    ) -> tuple[dict[int, np.ndarray], np.ndarray, float, np.ndarray, int,]:
+    def _expectation_maximization(self) -> None:
         """Do one expectation-maximization run.
 
-        Returns:
-            The class weights, PPM, log likelihood, responsibilities, and EM
-            steps.
+        Does one EM run until convergence and sets the following attributes:
+        - self.current_class_weights
+        - self.current_ppm
+        - self.current_score
+        - self.current_responsibilities
+        - self.current_steps
         """
-        self.ppm = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
+        self.current_ppm = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
 
         # the last class is the flat motif which remains unchanged
-        self.ppm[self.number_of_classes] = Background("uniprot").frequencies
+        self.current_ppm[self.number_of_classes] = Background("uniprot").frequencies
 
         self.responsibilities_by_length = self.sm.split_array_by_size(
             self._initialize_responsibilities()
@@ -116,13 +117,12 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
                 flush=True,
             )
 
-        return (
-            self.class_weights_by_length,
-            self.ppm,
-            log_likelihood,
-            self.sm.recombine_split_array(self.responsibilities_by_length),
-            steps,
+        self.current_class_weights = self.class_weights_by_length
+        self.current_score = log_likelihood
+        self.current_responsibilities = self.sm.recombine_split_array(
+            self.responsibilities_by_length
         )
+        self.current_steps = steps
 
     def _loglikelihood(self) -> float:  # noqa: CCR001
         """Compute the log likelihood under the current model.
@@ -145,7 +145,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
                 if length == self.motif_length:
                     prob = class_weights[c]
                     for pos, a in enumerate(sequences[s]):
-                        prob *= self.ppm[c, pos, a]
+                        prob *= self.current_ppm[c, pos, a]
                     p[s] += prob
                     continue
 
@@ -160,13 +160,13 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
 
                 # contribution of the N-terminal part of the motif
                 for pos in range(n_start, n_start + self.n_term):
-                    prob *= self.ppm[c, pos - n_start, sequences[s, pos]]
+                    prob *= self.current_ppm[c, pos - n_start, sequences[s, pos]]
 
                 # contribution of the C-terminal part of the motif
                 for pos in range(c_start, c_start + self.c_term):
                     # position in the motif = motif length -
                     # (C-term. start + length C-term. - position)
-                    prob *= self.ppm[
+                    prob *= self.current_ppm[
                         c, self.motif_length - c_start - self.c_term + pos, sequences[s, pos]
                     ]
 
@@ -176,13 +176,15 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
 
         # at the moment, we use pseudocount as a constant exponent of the Dirichlet priors, hence
         # we can do the following
-        log_likelihood += self.pseudocount * np.sum(np.log(self.ppm[: self.number_of_classes]))
+        log_likelihood += self.pseudocount * np.sum(
+            np.log(self.current_ppm[: self.number_of_classes])
+        )
 
         return log_likelihood
 
     def _maximization(self) -> None:  # noqa: CCR001
         """Maximization step."""
-        self.ppm[: self.number_of_classes] = self.pseudocount
+        self.current_ppm[: self.number_of_classes] = self.pseudocount
 
         for length, sequences in self.sm.get_size_sorted_arrays().items():
             n_sequences = sequences.shape[0]
@@ -197,7 +199,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
                 if length == self.motif_length:
                     resp = responsibilities[s, c]
                     for pos, a in enumerate(sequences[s]):
-                        self.ppm[c, pos, a] += resp
+                        self.current_ppm[c, pos, a] += resp
                     continue
 
                 # otherwise, only the N- and C-terminal positions contribute
@@ -207,13 +209,13 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
 
                 # contribution of the N-terminal part of the motif
                 for pos in range(n_start, n_start + self.n_term):
-                    self.ppm[c, pos - n_start, sequences[s, pos]] += resp
+                    self.current_ppm[c, pos - n_start, sequences[s, pos]] += resp
 
                 # contribution of the C-terminal part of the motif
                 for pos in range(c_start, c_start + self.c_term):
                     # position in the motif = motif length -
                     # (C-term. start + length C-term. - position)
-                    self.ppm[
+                    self.current_ppm[
                         c, self.motif_length - c_start - self.c_term + pos, sequences[s, pos]
                     ] += resp
 
@@ -223,7 +225,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
 
         # normalize so that frequencies sum to one for each position
         for c in range(self.number_of_classes):
-            self.ppm[c] /= np.sum(self.ppm[c], axis=1)[:, np.newaxis]
+            self.current_ppm[c] /= np.sum(self.current_ppm[c], axis=1)[:, np.newaxis]
 
     def _expectation(self) -> None:
         """Expectation step."""
@@ -246,7 +248,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
         for s, c in itertools.product(range(n_sequences), range(self.n_classes)):
             x = class_weights[c]
             for pos, a in enumerate(sequences[s]):
-                x *= self.ppm[c, pos, a]
+                x *= self.current_ppm[c, pos, a]
             responsibilities[s, c] = x
 
         responsibilities /= np.sum(responsibilities, axis=1, keepdims=True)
@@ -266,11 +268,11 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
             x = class_weights[c]
 
             for pos in range(self.n_term):
-                x *= self.ppm[c, pos, sequences[s, pos]]
+                x *= self.current_ppm[c, pos, sequences[s, pos]]
 
             for pos in range(length - self.c_term, length):
                 # position in the motif = motif length - (seq. length - position)
-                x *= self.ppm[c, self.motif_length - length + pos, sequences[s, pos]]
+                x *= self.current_ppm[c, self.motif_length - length + pos, sequences[s, pos]]
 
             responsibilities[s, c] = x
 
@@ -303,10 +305,10 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
                     )
 
                     for pos in range(self.n_term):
-                        prob *= self.ppm[c, pos, sequences[s, pos + n_start]]
+                        prob *= self.current_ppm[c, pos, sequences[s, pos + n_start]]
 
                     for pos in range(self.c_term):
-                        prob *= self.ppm[
+                        prob *= self.current_ppm[
                             c,
                             self.motif_length - self.c_term + pos,
                             sequences[s, pos + c_start],

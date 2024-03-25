@@ -1,6 +1,8 @@
 """Module for the deconvolution models used in the EM algorithms."""
 from __future__ import annotations
 
+from abc import ABC
+from abc import abstractmethod
 from itertools import product
 from typing import Any
 
@@ -20,7 +22,42 @@ from emmo.utils.exceptions import NotFittedError
 from emmo.utils.offsets import AlignedOffsets
 
 
-class DeconvolutionModelMHC1:
+# TODO: move common functionality into this base class
+class DeconvolutionModel(ABC):
+    """Abstract base class for deconvolution models."""
+
+    @property
+    @abstractmethod
+    def num_of_parameters(self) -> int:
+        """Number of model parameters.
+
+        Returns:
+            Number of model parameters.
+        """
+
+    @classmethod
+    @abstractmethod
+    def load(cls, directory: Openable) -> DeconvolutionModel:
+        """Load a model from a directory.
+
+        Args:
+            directory: The directory containing the model files.
+
+        Returns:
+            The loaded model.
+        """
+
+    @abstractmethod
+    def save(self, directory: Openable, force: bool = False) -> None:
+        """Save the model to a directory.
+
+        Args:
+            directory: The directory where to save the model.
+            force: Overwrite file if they already exist.
+        """
+
+
+class DeconvolutionModelMHC1(DeconvolutionModel):
     """MHC1 deconvolution model.
 
     This class holds the model and training parameters, as well as the position probability
@@ -60,6 +97,32 @@ class DeconvolutionModelMHC1:
         self.is_fitted = False
 
         self._initialize()
+
+    @property
+    def num_of_parameters(self) -> int:
+        """Number of model parameters (i.e., frequencies and class/offset weights).
+
+        At the moment, the frequencies from the flat motif are fix and therefore not counted.
+
+        Returns:
+            Number of model parameters.
+        """
+        # if class_weights is not set, we do not know the number of parameters
+        if not self.is_fitted:
+            raise NotFittedError()
+
+        # class weight incl. flat motif times the no. of offsets
+        # (subtract 1 because weights sum to one)
+        count = len(self.class_weights) * (self.n_classes - 1)
+
+        # at the moment the flat motif is fix and not estimated
+        # count += self.n_alphabet
+
+        # frequencies summed over all other classes
+        # (subtract 1 because aa frequencies sum to one)
+        count += self.number_of_classes * self.motif_length * (self.n_alphabet - 1)
+
+        return count
 
     @classmethod
     def load(cls, directory: Openable) -> DeconvolutionModelMHC1:
@@ -151,33 +214,8 @@ class DeconvolutionModelMHC1:
         # probalitities of the classes and offsets
         self.class_weights: dict[int, np.ndarray] = {}
 
-    def get_number_of_parameters(self) -> int:
-        """Return the number of parameters (i.e., frequencies and class/offset weights).
 
-        At the moment, the frequencies from the flat motif are fix and therefore not counted.
-
-        Returns:
-            Number of parameters.
-        """
-        # if class_weights is not set, we do not know the number of parameters
-        if not self.is_fitted:
-            raise NotFittedError()
-
-        # class weight incl. flat motif times the no. of offsets
-        # (subtract 1 because weights sum to one)
-        count = len(self.class_weights) * (self.n_classes - 1)
-
-        # at the moment the flat motif is fix and not estimated
-        # count += self.n_alphabet
-
-        # frequencies summed over all other classes
-        # (subtract 1 because aa frequencies sum to one)
-        count += self.number_of_classes * self.motif_length * (self.n_alphabet - 1)
-
-        return count
-
-
-class DeconvolutionModelMHC2:
+class DeconvolutionModelMHC2(DeconvolutionModel):
     """MHC2 deconvolution model.
 
     This class holds the model and training parameters, as well as the position probability
@@ -229,6 +267,27 @@ class DeconvolutionModelMHC2:
         self.is_fitted = False
 
         self._initialize_arrays()
+
+    @property
+    def num_of_parameters(self) -> int:
+        """Number of model parameters (i.e., frequencies and class/offset weights).
+
+        At the moment, the frequencies from the flat motif are fix and therefore not counted.
+
+        Returns:
+            Number of model parameters.
+        """
+        # class weight incl. flat motif times the no. of offsets
+        # (subtract 1 because weights sum to one)
+        count = self.n_offsets * self.n_classes - 1
+
+        # at the moment the flat motif is fix and not estimated
+        # count += self.n_alphabet
+
+        # frequencies summed over all other classes (subtract 1 because aa frequencies sum to one)
+        count += self.number_of_classes * self.motif_length * (self.n_alphabet - 1)
+
+        return count
 
     @classmethod
     def load(cls, directory: Openable) -> DeconvolutionModelMHC2:
@@ -351,26 +410,6 @@ class DeconvolutionModelMHC2:
         """
         return self.aligned_offsets.get_offset_list(length)
 
-    def get_number_of_parameters(self) -> int:
-        """Return the number of parameters (i.e., frequencies and class/offset weights).
-
-        At the moment, the frequencies from the flat motif are fix and therefore not counted.
-
-        Returns:
-            Number of parameters.
-        """
-        # class weight incl. flat motif times the no. of offsets
-        # (subtract 1 because weights sum to one)
-        count = self.n_offsets * self.n_classes - 1
-
-        # at the moment the flat motif is fix and not estimated
-        # count += self.n_alphabet
-
-        # frequencies summed over all other classes (subtract 1 because aa frequencies sum to one)
-        count += self.number_of_classes * self.motif_length * (self.n_alphabet - 1)
-
-        return count
-
     def score_peptide(self, peptide: str, include_flat: bool = False) -> float:
         """Score a peptide with this model.
 
@@ -428,7 +467,7 @@ class DeconvolutionModelMHC2:
         )
 
 
-class DeconvolutionModelMHC2NoOffsetWeights:
+class DeconvolutionModelMHC2NoOffsetWeights(DeconvolutionModel):
     """MHC2 deconvolution model without offset weights.
 
     This class holds the model and training parameters, as well as the position probability
@@ -472,6 +511,24 @@ class DeconvolutionModelMHC2NoOffsetWeights:
         self.is_fitted = False
 
         self._initialize_arrays()
+
+    @property
+    def num_of_parameters(self) -> int:
+        """Number of model parameters (frequencies and class priors).
+
+        Returns
+            The number of model parameters.
+        """
+        # class weight incl. flat motif (subtract 1 because weights sum to one)
+        count = self.n_classes - 1
+
+        # at the moment the flat motif is fix and not estimated
+        # count += self.n_alphabet
+
+        # frequencies summed over all other classes (subtract 1 because aa frequencies sum to one)
+        count += self.number_of_classes * self.motif_length * (self.n_alphabet - 1)
+
+        return count
 
     @classmethod
     def load(cls, directory: Openable) -> DeconvolutionModelMHC2NoOffsetWeights:
@@ -580,23 +637,6 @@ class DeconvolutionModelMHC2NoOffsetWeights:
     def recompute_pssm(self) -> None:
         """Update the PSSMs using the current PPMs and the background."""
         self.pssm[:] = self.ppm / self.background.frequencies
-
-    def get_number_of_parameters(self) -> int:
-        """Return the number of parameters (frequencies and class priors).
-
-        Returns
-            The number of parameters.
-        """
-        # class weight incl. flat motif (subtract 1 because weights sum to one)
-        count = self.n_classes - 1
-
-        # at the moment the flat motif is fix and not estimated
-        # count += self.n_alphabet
-
-        # frequencies summed over all other classes (subtract 1 because aa frequencies sum to one)
-        count += self.number_of_classes * self.motif_length * (self.n_alphabet - 1)
-
-        return count
 
     def score_peptide(self, peptide: str, include_flat: bool = False) -> float:
         """Score a peptide with this model.

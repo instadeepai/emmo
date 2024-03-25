@@ -11,6 +11,9 @@ from emmo.em.mhc2 import EMRunnerMHC2
 from emmo.io.file import Openable
 from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
+from emmo.utils import logger
+
+log = logger.get(__name__)
 
 
 class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
@@ -52,20 +55,22 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
 
         self.class_mapping = self._map_classes_to_indices()
 
-    def _initialize_responsibilities(self) -> None:
+    def _initialize_responsibilities(self) -> np.ndarray:
         """Initialize the responsibilities with known classes.
 
         Returns:
             The initialized responsibilities.
         """
-        self.responsibilities = np.zeros((self.n_sequences, self.n_classes, self.n_offsets))
+        _responsibilities = np.zeros((self.n_sequences, self.n_classes, self.n_offsets))
 
         for s in range(self.n_sequences):
             c = self.class_mapping[self.classes[s]]
-            self.responsibilities[s, c, :] = 1
+            _responsibilities[s, c, :] = 1
 
         # normalize the initial responsibilities
-        self.responsibilities /= np.sum(self.responsibilities, axis=(1, 2), keepdims=True)
+        _responsibilities /= np.sum(_responsibilities, axis=(1, 2), keepdims=True)
+
+        return _responsibilities
 
     def _map_classes_to_indices(self) -> dict[str, int]:
         """Map the class names to indices.
@@ -131,11 +136,7 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
         output_all_runs = False
         n_runs = 1
 
-        print(
-            f"--------------------------------------------------------------\n"
-            f"Running EM algorithm with {self.number_of_classes} classes\n"
-            f"with given class initialization --> just doing 1 EM run\n"
-        )
+        log.info("Running EM algorithm with given class initialization, just doing 1 EM run")
 
         super().run(
             output_directory,

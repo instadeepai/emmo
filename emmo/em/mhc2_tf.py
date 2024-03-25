@@ -1,7 +1,6 @@
 """Tensorflow implementation of the EM algorithm for MHC2 ligands."""
 from __future__ import annotations
 
-import numpy as np
 import tensorflow as tf
 
 from emmo.em.mhc2_base import BaseEMRunnerMHC2
@@ -482,14 +481,17 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             dtype=tf.int32,
         )
 
-    def _expectation_maximization(
-        self,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, np.ndarray, int]:
+    def _expectation_maximization(self) -> None:
         """Do one expectation-maximization run.
 
-        Returns:
-            The class weights, PPM, PSSM, log likelihood (using PSSM), log likelihood (using PPM),
-            responsibilities, and EM steps.
+        Does one EM run until convergence and sets at least the following attributes:
+        - self.current_class_weights
+        - self.current_ppm
+        - self.current_score
+        - self.current_responsibilities
+        - self.current_steps
+        - self.current_pssm
+        - self.current_log_likelihood_ppm
         """
         (
             class_weights,
@@ -512,15 +514,14 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             self.offset_upweighting,
         )
 
-        return (
-            class_weights.numpy(),
-            ppm.numpy(),
-            pssm.numpy(),
-            float(ll_pssm.numpy()),
-            float(ll_ppm.numpy()),
-            responsibilities.numpy(),
-            int(steps.numpy()),
-        )
+        self.current_class_weights = class_weights.numpy()
+        self.current_ppm = ppm.numpy()
+        self.current_score = float(ll_pssm.numpy())
+        self.current_responsibilities = responsibilities.numpy()
+        self.current_steps = int(steps.numpy())
+
+        self.current_pssm = pssm.numpy()
+        self.current_log_likelihood_ppm = float(ll_ppm.numpy())
 
 
 if __name__ == "__main__":
