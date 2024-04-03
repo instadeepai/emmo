@@ -158,11 +158,12 @@ class BaseEMRunnerMHC2(BaseRunner):
         )
         self.run_details["AIC_PSSM"].append(compute_aic(num_of_parameters, self.current_score))
 
-    def _current_state_to_model(self) -> DeconvolutionModelMHC2:
+    def _build_model(self) -> DeconvolutionModelMHC2:
         """Collect current PPM and class weights into a model.
 
         Returns:
-            The current state as a model.
+            The current parameters (PPMs, class weights, etc.) collected in an instance of the
+            corresponding deconvolution model class.
         """
         model = DeconvolutionModelMHC2(
             self.sm.alphabet,

@@ -108,11 +108,12 @@ def plot_mhc2_model(
     plt.show()
 
 
-def plot_cleavage_model(model: CleavageModel) -> None:
+def plot_cleavage_model(model: CleavageModel, save_as: Openable | None = None) -> None:
     """Plot a cleavage model.
 
     Args:
         model: The cleavage model.
+        save_as: If provided, save the plot at this location.
     """
     number_of_classes = model.number_of_classes
 
@@ -121,9 +122,12 @@ def plot_cleavage_model(model: CleavageModel) -> None:
 
     _, axs = plt.subplots(2, number_of_classes, figsize=(4 * number_of_classes, 8))
 
+    if number_of_classes == 1:
+        axs = axs[:, np.newaxis]
+
     for i, name, ppm, cum_class_weights in zip(
         range(2),
-        ["N terminus", "C terminus"],
+        ["N-terminus", "C-terminus"],
         [model.ppm_n, model.ppm_c],
         [cum_class_weights_n, cum_class_weights_c],
     ):
@@ -141,8 +145,14 @@ def plot_cleavage_model(model: CleavageModel) -> None:
                 f"{name}\nmotif {j+1} of {number_of_classes} (weight {cum_class_weights[j]:.3f})"
             )
 
+    _unify_ylim(axs)
     plt.tight_layout()
-    plt.show()
+
+    if save_as is not None:
+        save_plot(save_as)
+        log.info(f"Saved plot at {save_as}")
+    else:
+        plt.show()
 
 
 def plot_motifs_and_length_distribution_per_allele_mhc2(
@@ -196,7 +206,7 @@ def plot_motifs_and_length_distribution_per_allele_mhc2(
                     f"{number_of_classes}, got {model.number_of_classes}"
                 )
 
-            _plot_mhc2_model_to_axes(model, allele, axs[i, ::3])
+            _plot_mhc2_model_to_axes(model, allele, axs[i, :-2:3])
 
             _plot_mhc2_offset_weights_to_axes(
                 model,
@@ -210,20 +220,29 @@ def plot_motifs_and_length_distribution_per_allele_mhc2(
                 model,
                 responsibilities,
                 allele,
-                list(axs[i, 2:-1:3]) + [axs[i, -1]],
+                list(axs[i, 2:-2:3]) + [axs[i, -1]],
                 include_flat=True,
             )
 
-        # normalize all motif plot to the same height
-        max_ylim = max(ax.get_ylim()[1] for ax in axs[:, ::3].flatten())
-        for ax in axs[:, ::3].flatten():
-            ax.set_ylim(0.0, max_ylim)
-
+        _unify_ylim(axs[:, :-2:3])
         plt.tight_layout()
 
         file_path = output_directory / f"{gene}_classes_{number_of_classes}.pdf"
         save_plot(file_path)
         log.info(f"Saved plot at {file_path}")
+
+
+def _unify_ylim(axs: np.ndarray[Axes]) -> None:
+    """Unify the the ylim of Axes objects to the minimum and maximum.
+
+    Args:
+        axs: Array of Axes instances.
+    """
+    axs = axs.flatten()
+    min_ylim = min(ax.get_ylim()[0] for ax in axs)
+    max_ylim = max(ax.get_ylim()[1] for ax in axs)
+    for ax in axs:
+        ax.set_ylim(min_ylim, max_ylim)
 
 
 def _plot_mhc2_model_to_axes(

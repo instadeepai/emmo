@@ -83,7 +83,7 @@ class BaseRunner(ABC):
             output_directory: The output directory. The best model is written directly into this
                 directory as well a summary of the runs. The models from the other runs are
                 optionally written to subdirectories.
-            output_all_runs: Whether all models obtained by the individual runs shall be returned
+            output_all_runs: Whether all models obtained by the individual runs must be returned
                 (or only that of the best run).
             n_runs: Number of EM runs.
             random_seed: The random seed to be used for initializing the EM runs.
@@ -110,11 +110,7 @@ class BaseRunner(ABC):
         path = AnyPath(output_directory)
 
         # (re)set variables storing for the best model
-        self.best_model = None
-        self.best_responsibilities = None
-        self.best_run = None
-        self.best_score = float("-inf")
-        self.run_details = defaultdict(list)
+        self._reset_best_model_variables()
 
         # random number generator
         self.rng = np.random.default_rng(self.random_seed)
@@ -137,7 +133,7 @@ class BaseRunner(ABC):
                 f"({self.current_steps} steps, {elapsed_time:.4f} s, score = {self.current_score})"
             )
 
-            model = self._current_state_to_model()
+            model = self._build_model()
             self.run_details["EM_steps"].append(self.current_steps)
             self.run_details["time"].append(elapsed_time)
             self._runner_specific_run_details(model.num_of_parameters)
@@ -187,11 +183,12 @@ class BaseRunner(ABC):
         """
 
     @abstractmethod
-    def _current_state_to_model(self) -> DeconvolutionModel:
+    def _build_model(self) -> DeconvolutionModel:
         """Collect current PPM and class weights into a model.
 
         Returns:
-            The current state as a model.
+            The current parameters (PPMs, class weights, etc.) collected in an instance of the
+            corresponding deconvolution model class.
         """
 
     @abstractmethod
@@ -217,3 +214,11 @@ class BaseRunner(ABC):
                 'responsibilities.csv'.
             force: Overwrite files if they already exist.
         """
+
+    def _reset_best_model_variables(self) -> None:
+        """Reset variables storing for the best model."""
+        self.best_model = None
+        self.best_responsibilities = None
+        self.best_run = None
+        self.best_score = float("-inf")
+        self.run_details = defaultdict(list)
