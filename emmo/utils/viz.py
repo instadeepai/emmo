@@ -1,4 +1,4 @@
-"""Module for functions to plot motifs."""
+"""Module for functions to plot deconvolution results like motifs and length distributions."""
 from __future__ import annotations
 
 import tempfile
@@ -17,6 +17,7 @@ from emmo.constants import NATURAL_AAS
 from emmo.io.file import Openable
 from emmo.models.cleavage import CleavageModel
 from emmo.models.deconvolution import DeconvolutionModelMHC2
+from emmo.models.prediction import PredictorMHC2
 from emmo.pipeline.background import Background
 from emmo.pipeline.background import BackgroundType
 from emmo.utils import logger
@@ -48,12 +49,14 @@ def save_plot(file_path: Openable) -> None:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(file_path)
 
+    log.info(f"Saved plot at {file_path}")
+
     plt.close()
 
 
 def plot_single_ppm(
     ppm: np.ndarray,
-    alphabet: list[str] | tuple[str, ...] | None = None,
+    alphabet: str | list[str] | tuple[str, ...] | None = None,
     background: BackgroundType | None = None,
     ax: Axes | None = None,
 ) -> None:
@@ -150,7 +153,6 @@ def plot_cleavage_model(model: CleavageModel, save_as: Openable | None = None) -
 
     if save_as is not None:
         save_plot(save_as)
-        log.info(f"Saved plot at {save_as}")
     else:
         plt.show()
 
@@ -229,7 +231,53 @@ def plot_motifs_and_length_distribution_per_allele_mhc2(
 
         file_path = output_directory / f"{gene}_classes_{number_of_classes}.pdf"
         save_plot(file_path)
-        log.info(f"Saved plot at {file_path}")
+
+
+def plot_predictor_mhc2(predictor: PredictorMHC2, output_directory: Openable) -> None:
+    """Plot the summary of an MHC2 predictor (motifs of alleles and cleavage model).
+
+    Args:
+        predictor: The MHC2 binding predictor.
+        output_directory: Local or remote directory where to save the plots.
+    """
+    output_directory = AnyPath(output_directory)
+
+    plot_cleavage_model(predictor.cleavage_model, output_directory / "cleavage_model.pdf")
+
+    genes = sorted({allele[:2] for allele in predictor.ppms})
+
+    for gene in genes:
+        log.info(f"Plotting motifs for {gene} ...")
+        alleles = sorted([allele for allele in predictor.ppms if allele.startswith(gene)])
+
+        num_of_alleles = len(alleles)
+        _, axs = plt.subplots(num_of_alleles, 1, figsize=(6, 4 * num_of_alleles))
+
+        for i, allele in enumerate(alleles):
+            log.info(f"Plotting {gene} allele {i+1}/{num_of_alleles} ({allele})")
+            ax = axs[i]
+            plot_single_ppm(
+                predictor.ppms[allele],
+                alphabet=predictor.alphabet,
+                background=predictor.background,
+                ax=ax,
+            )
+            title = allele
+
+            if "selected_motifs" in predictor.compilation_details:
+                details = predictor.compilation_details["selected_motifs"][allele]
+                title = (
+                    f"{title}\n"
+                    f"motif {details['motif']} of {details['classes']} "
+                    f"(weight {details['motif_weight']:.3f})"
+                )
+            ax.set_title(title)
+
+        _unify_ylim(axs)
+        plt.tight_layout()
+
+        file_path = output_directory / f"motifs_{gene}.pdf"
+        save_plot(file_path)
 
 
 def _unify_ylim(axs: np.ndarray[Axes]) -> None:

@@ -49,10 +49,7 @@ def pull_model(
     "-n",
     type=str,
     required=True,
-    help=(
-        "Model to use: it can be the name of the folder where the model is saved, i.e. "
-        "(experiment_name + date) or the path."
-    ),
+    help=("Model to use: it can be the name of the folder where the model is saved or the path."),
 )
 @click.option(
     "--force",

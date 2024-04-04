@@ -1,7 +1,6 @@
 """Command line tools for deconvolution."""
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +10,12 @@ from cloudpathlib import AnyPath
 from cloudpathlib import CloudPath
 
 from emmo.io.file import load_csv
+from emmo.io.output import find_deconvolution_results_mhc2
 from emmo.models.cleavage import CleavageModel
 from emmo.pipeline.background import Background
 from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
 from emmo.utils import logger
-from emmo.utils.alleles import parse_allele_pair
 from emmo.utils.click import arguments
 from emmo.utils.click import callback
 from emmo.utils.viz import plot_cleavage_model
@@ -207,54 +206,7 @@ def plot_deconvolution_per_allele_mhc2(
         output_directory = input_directory / "plots"
 
     _check_output_directory(output_directory, force, skip_existing=False)
-
-    data = []
-
-    for allele_dir in input_directory.iterdir():
-        if not allele_dir.is_dir():
-            continue
-
-        try:
-            allele_alpha, allele_beta = parse_allele_pair(allele_dir.name)
-        except ValueError:
-            log.warning(
-                f"input directory contains the subdirectory '{allele_dir.name}' from which the "
-                "alpha and beta alleles could not be parsed"
-            )
-            continue
-
-        for model_dir in allele_dir.iterdir():
-            if not model_dir.is_dir():
-                continue
-
-            # backward compatibility: the current naming convention is 'classes_{num_of_classes}',
-            # the old naming convention is 'clusters{num_of_classes}'
-            match = re.match(r"((classes_)|(clusters))([1-9]\d*)", model_dir.name)
-            if not match:
-                log.warning(
-                    f"directory '{allele_dir}' contains a subdirectory '{model_dir.name}' from "
-                    "which the number of classes could not be parsed, it will be skipped"
-                )
-                continue
-
-            number_of_classes = int(match.group(4))
-
-            data.append(
-                {
-                    "allele_alpha": allele_alpha,
-                    "allele_beta": allele_beta,
-                    "number_of_classes": number_of_classes,
-                    "model_path": model_dir,
-                }
-            )
-
-    if not data:
-        raise ValueError(f"no model directories found in input directory '{input_directory}'")
-
-    df_model_dirs = pd.DataFrame(data).sort_values(
-        by=["allele_alpha", "allele_beta", "number_of_classes"], ignore_index=True
-    )
-
+    df_model_dirs = find_deconvolution_results_mhc2(input_directory)
     plot_motifs_and_length_distribution_per_allele_mhc2(df_model_dirs, output_directory)
 
 

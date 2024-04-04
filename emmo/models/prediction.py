@@ -4,6 +4,8 @@ This predictor is similar to MixMHC2pred (Racle et al. 2019).
 """
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from cloudpathlib import AnyPath
@@ -20,6 +22,8 @@ from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
 from emmo.resources.length_distribution import get_length_distribution
 from emmo.utils import logger
+from emmo.utils.alleles import parse_allele_pair
+from emmo.utils.exceptions import NoSequencesError
 from emmo.utils.motifs import information_content
 from emmo.utils.motifs import position_probability_matrix
 from emmo.utils.offsets import AlignedOffsets
@@ -39,7 +43,8 @@ class PredictorMHC2:
         offset_weights: np.ndarray,
         background: BackgroundType,
         motif_length: int = 9,
-        length_distribution: dict[int, float] | str = "MHC2_biondeep",
+        length_distribution: dict[int, float] | str | None = None,
+        compilation_details: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the predictor.
 
@@ -51,8 +56,9 @@ class PredictorMHC2:
             background: The background amino acid frequencies. Must be a string corresponding to
                 one of the available backgrounds.
             motif_length: Motif length.
-            length_distribution: The length distribution of the ligands. Must be a string
+            length_distribution: The length distribution of the ligands. Can be a string
                 corresponding to one of the available distributions.
+            compilation_details: Details about the model compilation.
         """
         self.alphabet = alphabet
         self.alphabet_index = {a: i for i, a in enumerate(alphabet)}
@@ -75,6 +81,10 @@ class PredictorMHC2:
         if self.aligned_offsets.n_offsets != len(self.offset_weights):
             raise ValueError("number of offsets weights does not match")
 
+        self.compilation_details = {}
+        if compilation_details is not None:
+            self.compilation_details.update(compilation_details)
+
     @classmethod
     def load(cls, directory: Openable) -> PredictorMHC2:
         """Load a model from a directory.
@@ -92,13 +102,26 @@ class PredictorMHC2:
         ppms = {}
         for file in (directory / "binding").iterdir():
             if file.is_file() and file.suffix == ".csv":
-                allele = file.stem
+                try:
+                    allele_alpha, allele_beta = parse_allele_pair(file.stem)
+                    allele = f"{allele_alpha}-{allele_beta}"
+                except ValueError:
+                    log.warning(
+                        f"could not parse alpha and beta allele from file name '{file.name}'"
+                    )
+                    allele = file.stem
+
                 matrix = load_csv(file, index_col=0, header=0).to_numpy()
                 ppms[allele] = matrix
 
-        length_distribution = {
-            int(length): x for length, x in model_specs["length_distribution"].items()
-        }
+        if "length_distribution" in model_specs and isinstance(
+            model_specs["length_distribution"], dict
+        ):
+            length_distribution = {
+                int(length): x for length, x in model_specs["length_distribution"].items()
+            }
+        else:
+            length_distribution = model_specs.get("length_distribution", None)
 
         if "background" not in model_specs:
             default_background = "MHC2_biondeep"
@@ -116,34 +139,38 @@ class PredictorMHC2:
             model_specs["background"],
             motif_length=model_specs["motif_length"],
             length_distribution=length_distribution,
+            compilation_details=model_specs.get("compilation_details"),
         )
 
     @classmethod
     def compile_from_selected_models(
         cls,
-        selected_models: dict[str, tuple[Openable, int, int]],
+        selected_models: dict[str, dict[str, int | Openable]],
         cleavage_model_path: Openable,
-        background: BackgroundType,
+        background: BackgroundType | None,
         peptides_path: Openable | None = None,
         motif_length: int = 9,
-        length_distribution: str = "MHC2_biondeep",
+        length_distribution: str | None = None,
         recompute_ppms_from_best_responsibility: bool = False,
     ) -> PredictorMHC2:
         """Compile a predictor from deconvolution models and a cleavage model.
 
         Args:
             selected_models: The deconvolution models and classes within these models to be
-                gathered. The keys are the alleles. The values are the path to the a directory
-                containing the results for different numbers of classes, the number of classes to
-                be used and the 1-based index of the class within this model to be used.
+                gathered. The keys are the alleles. The values are dicts containing at least the
+                following keys:
+                - 'classes': Number of classes in the deconvolution model.
+                - 'motif': The motif to select from the deconvolution model (1-based index).
+                - 'model_path': The path to the deconvolution model directory.
             cleavage_model_path: The path to the cleavage model.
             background: The background amino acid frequencies. Can also be a string corresponding
-                to one of the available backgrounds.
+                to one of the available backgrounds. If this is None, the distribution will be
+                taken from one of the deconvolution models.
             peptides_path: The directory containing the peptide files. This is only needed for
                 older deconvolution models that did not save the 'training_params'.
             motif_length: The motif length.
             length_distribution: The length distribution of the ligands. Must be a string
-                corresponding to  one of the available distributions.
+                corresponding to  one of the available distributions (or None).
             recompute_ppms_from_best_responsibility: Whether to recompute the PPMs from the core
                 predictions in the deconvolution runs. The 'responsibilities.csv' file must be
                 contained in the respective deconvolution models directories.
@@ -151,26 +178,49 @@ class PredictorMHC2:
         Returns:
             The compiled MHC2 binding predictor.
         """
-        loaded_binding_models = {}
-        for allele, (path, k, _) in selected_models.items():
-            path = AnyPath(path)
-            try:
-                loaded_binding_models[allele] = Model.load(path / f"classes_{k}")
-            except FileNotFoundError:
-                # backward compatibility: older runs do not have the underscore
-                loaded_binding_models[allele] = Model.load(path / f"clusters{k}")
+        if not selected_models:
+            raise ValueError("'selected_models' must not be empty")
 
-        if recompute_ppms_from_best_responsibility:
-            ppms = cls._recompute_ppms(selected_models)
-        else:
-            ppms = {
-                allele: model.ppm[selected_models[allele][2] - 1].copy()
-                for allele, model in loaded_binding_models.items()
-            }
+        loaded_binding_models = {}
+        selection_details = {}
+        ppms = {}
+
+        for allele, selection in selected_models.items():
+            model_path = AnyPath(selection["model_path"])
+            model = Model.load(model_path)
+
+            loaded_binding_models[allele] = model
+            selection_details[allele] = selection.copy()
+            del selection_details[allele]["model_path"]
+
+            motif_idx = selection["motif"]
+            if not isinstance(motif_idx, int):
+                raise TypeError("'motif' must be an integer")
+
+            if recompute_ppms_from_best_responsibility:
+                try:
+                    ppms[allele] = cls._recompute_ppms(model_path, motif_idx)
+                except NoSequencesError:
+                    log.warning(
+                        f"Could not recompute PPM for allele {allele} because no peptides were "
+                        "assigned to the class, falling back to PPM from deconvolution model"
+                    )
+
+            if allele not in ppms:
+                ppms[allele] = model.ppm[motif_idx - 1].copy()
 
         averaged_offset_weights = cls._compute_averaged_offset_weights(
-            selected_models, loaded_binding_models, peptides_path=peptides_path
+            loaded_binding_models, selection_details, peptides_path=peptides_path
         )
+
+        if background is None:
+            # pick an arbitrary but deterministic allele from the available ones
+            allele = sorted(loaded_binding_models)[0]
+            background = loaded_binding_models[allele].background
+            log.info(
+                "Using background distribution associated with deconvolution model for allele "
+                f"{allele}"
+            )
 
         return cls(
             next(iter(loaded_binding_models.values())).alphabet,
@@ -180,60 +230,56 @@ class PredictorMHC2:
             background,
             motif_length=motif_length,
             length_distribution=length_distribution,
+            compilation_details={"selected_motifs": selection_details},
         )
 
     @classmethod
-    def _recompute_ppms(
-        cls, selected_models: dict[str, tuple[AnyPath, int, int]]
-    ) -> dict[str, np.ndarray]:
+    def _recompute_ppms(cls, model_path: Openable, motif: int) -> np.ndarray:
         """Recompute PPMs from the core predictions.
 
         Args:
-            selected_models: The deconvolution models and classes within these models to be
-                gathered. See load() function.
+            model_path: The path to the deconvolution model directory.
+            motif: The motif to select from the deconvolution model (1-based index).
+
+        Raises:
+            NoSequencesError: If no sequences were assigned to the motif based on the maximum
+                responsibility.
 
         Returns:
-            A dictionary with alleles as keys and PPMs as values.
+            The position probability matrix.
         """
-        ppms = {}
+        model_path = AnyPath(model_path)
+        resp = load_csv(model_path / "responsibilities.csv")
 
-        for allele, (path, k, i) in selected_models.items():
-            # load the responsibilities table
-            try:
-                resp = load_csv(path / f"classes_{k}" / "responsibilities.csv")
-            except FileNotFoundError:
-                # compatibility with older runs
-                resp = load_csv(path / f"clusters{k}" / "responsibilities.csv")
+        sequences = list(
+            resp.loc[resp["best_class"].astype(str) == str(motif), "binding_core_prediction"]
+        )
 
-            sequences = list(
-                resp.loc[resp["best_class"].astype(str) == str(i), "binding_core_prediction"]
+        if not sequences:
+            raise NoSequencesError(
+                "Could not compute PPM because no peptides were assigned to the class"
             )
 
-            if sequences:
-                ppms[allele] = position_probability_matrix(
-                    sequences, use_pseudocounts=True, pseudocount_beta=200
-                )
-            else:
-                print(
-                    f"Could not recompute PPM for allele {allele} "
-                    "because no peptides were assigned to the class"
-                )
-
-        return ppms
+        return position_probability_matrix(sequences, use_pseudocounts=True, pseudocount_beta=200)
 
     @classmethod
     def _compute_averaged_offset_weights(
         cls,
-        selected_models: dict[str, tuple[Openable, int, int]],
         loaded_binding_models: dict[str, Model],
+        selection_details: dict[str, dict[str, Any]],
         peptides_path: Openable | None = None,
     ) -> np.ndarray:
         """Weighted average of the offset weights over all models.
 
+        The function also adds 'effective_peptide_number' and 'motif weight' for each allele in
+        'selection_details'.
+
         Args:
-            selected_models: The deconvolution models and classes within these models to be
-                gathered. See load() function.
             loaded_binding_models: The loaded binding models.
+            selection_details: A dict containing the alleles as keys and as values dicts with at
+                at least the following keys:
+                - 'classes': Number of classes in the deconvolution model.
+                - 'motif': The motif to select from the deconvolution model (1-based index).
             peptides_path: The directory containing the peptide files. This is only needed for
                 older deconvolution models that did not save the 'training_params'.
 
@@ -269,10 +315,13 @@ class PredictorMHC2:
         averaged_weights = np.asarray([0.0], dtype=np.float64)
 
         for allele, model in loaded_binding_models.items():
-            # row two select from the class_weights arrow
-            i = selected_models[allele][2] - 1
+            eff_num_peptides = effective_peptide_counts_per_allele[allele]
+            weights = model.class_weights[selection_details[allele]["motif"] - 1]
 
-            weights = effective_peptide_counts_per_allele[allele] * model.class_weights[i]
+            selection_details[allele]["effective_peptide_number"] = eff_num_peptides
+            selection_details[allele]["motif_weight"] = weights.sum()
+
+            weights *= eff_num_peptides
 
             # give alias such a is not shorter than b
             if len(averaged_weights) >= len(weights):
@@ -303,6 +352,8 @@ class PredictorMHC2:
         }
         model_specs["background"] = self.background.get_representation()
         model_specs["offset_weights"] = self.offset_weights.tolist()
+        if self.compilation_details:
+            model_specs["compilation_details"] = self.compilation_details
 
         save_json(model_specs, directory / "model_specs.json", force=force)
 
@@ -377,7 +428,8 @@ class PredictorMHC2:
 
         return score, best_offset
 
-    def score_dataframe(
+    # TODO: the following function needs refactoring
+    def score_dataframe(  # noqa: CCR001
         self,
         df: pd.DataFrame,
         peptide_column: str = "peptide",
@@ -424,7 +476,7 @@ class PredictorMHC2:
         # prefer originally available motifs whenever available
         used_ppms = {allele: [ppm] for allele, ppm in self.ppms.items()}
 
-        alleles = df[allele_beta_column] + "-" + df[allele_alpha_column]
+        alleles = df[allele_alpha_column] + "-" + df[allele_beta_column]
         allele_set = set(alleles.dropna().unique())
         unseen_alleles = sorted(allele_set - set(self.available_alleles))
 
@@ -529,6 +581,9 @@ class PredictorMHC2:
         df[f"{prefix}BC"] = df[f"{prefix}binding"] * df[f"{prefix}cleavage"]
 
         if score_length:
+            if self.length_distribution is None:
+                raise RuntimeError("length distribution is not available in this predictor")
+
             df[f"{prefix}length_score"] = (
                 df[peptide_column].str.len().apply(lambda x: self.length_distribution.get(x, 0.0))
             )
