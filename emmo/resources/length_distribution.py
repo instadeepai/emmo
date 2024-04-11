@@ -78,8 +78,3 @@ def get_length_distribution(which: str) -> dict[int, float]:
         return LENGTH_DISTRIBUTION_MS_MHC2_DATA
     else:
         raise ValueError(f"background '{which}' is not available")
-
-
-if __name__ == "__main__":
-    print(get_length_distribution(which="MHC1_biondeep"))
-    print(get_length_distribution(which="MHC2_biondeep"))

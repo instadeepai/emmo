@@ -630,16 +630,3 @@ class VariableLengthEM:
             "time": self.time_per_run,
         }
         save_csv(pd.DataFrame(d), directory / "runs.csv", force=force)
-
-
-if __name__ == "__main__":
-    from emmo.constants import REPO_DIRECTORY
-
-    input_name = "HLA-A0101_A0218_background_class_II"
-    directory = REPO_DIRECTORY / "validation" / "local"
-    file = directory / f"{input_name}.txt"
-    output_directory = directory / f"{input_name}_no_class_weights"
-
-    sm = SequenceManager.load_from_txt(file)
-    em_runner = VariableLengthEM(sm, 9, 2, "MHC2_biondeep")
-    em_runner.run(output_directory, output_all_runs=True, force=True)

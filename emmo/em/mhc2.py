@@ -203,16 +203,3 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
                 responsibilities[s, c, o] = prob
 
             responsibilities /= np.sum(responsibilities, axis=(1, 2), keepdims=True)
-
-
-if __name__ == "__main__":
-    from emmo.constants import REPO_DIRECTORY
-
-    input_name = "HLA-A0101_A0218_background_class_II"
-    directory = REPO_DIRECTORY / "validation" / "local"
-    file = directory / f"{input_name}.txt"
-    output_directory = directory / input_name
-
-    sm = SequenceManager.load_from_txt(file)
-    em_runner = EMRunnerMHC2(sm, 9, 2, "MHC2_biondeep")
-    em_runner.run(output_directory, output_all_runs=True, force=True)

@@ -108,6 +108,9 @@ class DeconvolutionModelMHC1(DeconvolutionModel):
 
         At the moment, the frequencies from the flat motif are fix and therefore not counted.
 
+        Raises:
+            NotFittedError: If the model has not been fitted.
+
         Returns:
             Number of model parameters.
         """
@@ -348,7 +351,11 @@ class BaseDeconvolutionModelMHC2(DeconvolutionModel):
 
     @abstractmethod
     def _initialize_class_weights(self) -> np.ndarray:
-        """Initialize class weights."""
+        """Initialize class weights.
+
+        Returns:
+            The class weights array initialized with zeros.
+        """
 
     @abstractmethod
     def _get_score_class_and_offset(self, peptide: str, classes: int) -> tuple[float, int, int]:
@@ -524,7 +531,11 @@ class DeconvolutionModelMHC2(BaseDeconvolutionModelMHC2):
         return self.aligned_offsets.get_offset_list(length)
 
     def _initialize_class_weights(self) -> np.ndarray:
-        """Initialize class weights."""
+        """Initialize class weights.
+
+        Returns:
+            The class weights array initialized with zeros.
+        """
         # probalitities of the classes and offsets
         return np.zeros((self.n_classes, self.n_offsets))
 
@@ -536,7 +547,7 @@ class DeconvolutionModelMHC2(BaseDeconvolutionModelMHC2):
             classes: The number of classes to include (i.e., with or without flat motif).
 
         Returns:
-            tuple: The score, index of the best class index, and best offset.
+            The score, index of the best class index, and best offset.
         """
         # TODO: think about how to handle such peptides
         if len(peptide) > self.max_sequence_length:
@@ -712,7 +723,11 @@ class DeconvolutionModelMHC2NoOffsetWeights(BaseDeconvolutionModelMHC2):
         save_csv(df_class_weights, directory / f"class_weights_{self.n_classes-1}.csv", force=force)
 
     def _initialize_class_weights(self) -> np.ndarray:
-        """Initialize class weights."""
+        """Initialize class weights.
+
+        Returns:
+            The class weights array initialized with zeros.
+        """
         return np.zeros(self.n_classes)
 
     def _get_score_class_and_offset(self, peptide: str, classes: int) -> tuple[float, int, int]:
@@ -750,22 +765,3 @@ class DeconvolutionModelMHC2NoOffsetWeights(BaseDeconvolutionModelMHC2):
             total_score += current_max
 
         return total_score, best_class, best_offset
-
-
-if __name__ == "__main__":
-    from emmo.constants import REPO_DIRECTORY
-
-    input_name = "HLA-A0101_A0218_background_class_II"
-    directory = REPO_DIRECTORY / "validation" / "local" / input_name
-
-    model = DeconvolutionModelMHC2.load(directory)
-
-    df = load_csv(
-        REPO_DIRECTORY / "validation" / "local" / f"{input_name}.txt",
-        header=None,
-        names=["peptide"],
-    )
-    df[["score", "best_class", "best_offset"]] = model.predict(df["peptide"])
-
-    print(df)
-    save_csv(df, REPO_DIRECTORY / "validation" / "local" / f"{input_name}_scored.csv", force=True)
