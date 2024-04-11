@@ -96,7 +96,11 @@ class DeconvolutionModelMHC1(DeconvolutionModel):
         self.training_params: dict[str, Any] = {}
         self.is_fitted = False
 
-        self._initialize()
+        # position probability matrices
+        self.ppm = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
+
+        # probalitities of the classes and offsets
+        self.class_weights: dict[int, np.ndarray] = {}
 
     @property
     def num_of_parameters(self) -> int:
@@ -206,16 +210,160 @@ class DeconvolutionModelMHC1(DeconvolutionModel):
         )
         save_csv(df_class_weights, directory / f"class_weights_{self.n_classes-1}.csv", force=force)
 
-    def _initialize(self) -> None:
-        """Init arrays for position probability matrices and dictionary for the class weights."""
+
+class BaseDeconvolutionModelMHC2(DeconvolutionModel):
+    """Base class for MHC2 deconvolution models."""
+
+    def __init__(
+        self,
+        alphabet: str | tuple[str, ...] | list[str],
+        motif_length: int,
+        number_of_classes: int,
+        background: BackgroundType,
+        has_flat_motif: bool = True,
+    ) -> None:
+        """Initialize the MHC2 deconvolution model.
+
+        Initially, the 'is_fitted' parameter is set to False and needs to be set to True to enable
+        prediction.
+
+        Args:
+            alphabet: The (amino acid) alphabet.
+            motif_length: Motif length.
+            number_of_classes: Number of motifs/classes (excl. the flat motif).
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
+            has_flat_motif: Whether the model includes a flat motif.
+        """
+        self.alphabet = alphabet
+        self.n_alphabet = len(alphabet)
+        self.alphabet_index = {a: i for i, a in enumerate(alphabet)}
+
+        self.motif_length = motif_length
+
+        self.number_of_classes = number_of_classes
+        self.n_classes = number_of_classes + (1 if has_flat_motif else 0)
+
+        self.background = Background(background)
+
+        self.has_flat_motif = has_flat_motif
+
+        self.training_params: dict[str, Any] = {}
+        self.is_fitted = False
+
         # position probability matrices
         self.ppm = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
 
-        # probalitities of the classes and offsets
-        self.class_weights: dict[int, np.ndarray] = {}
+        # position-specific scoring matrix
+        self.pssm = np.zeros_like(self.ppm)
+
+        self.class_weights = self._initialize_class_weights()
+
+    @property
+    @abstractmethod
+    def num_of_parameters(self) -> int:
+        """Number of model parameters.
+
+        Returns:
+            Number of model parameters.
+        """
+
+    @classmethod
+    @abstractmethod
+    def load(cls, directory: Openable) -> DeconvolutionModel:
+        """Load a model from a directory.
+
+        Args:
+            directory: The directory containing the model files.
+
+        Returns:
+            The loaded model.
+        """
+
+    @abstractmethod
+    def save(self, directory: Openable, force: bool = False) -> None:
+        """Save the model to a directory.
+
+        Args:
+            directory: The directory where to save the model.
+            force: Overwrite file if they already exist.
+        """
+
+    def recompute_pssm(self) -> None:
+        """Update the PSSMs using the current PPMs and the background."""
+        self.pssm[:] = self.ppm / self.background.frequencies
+
+    def score_peptide(self, peptide: str, include_flat: bool = True) -> tuple[float, str, int]:
+        """Score a peptide with this model.
+
+        The calculates the sum of scores over all classes and all possible offsets. For each class
+        and offset, the score is determined by applying the classes' PSSM and multiplying this with
+        the class-offset weight.
+
+        Args:
+            peptide: The peptide to be scored.
+            include_flat: Whether to include the flat motif in the sum of scores.
+
+        Returns:
+            The score, the best class (1-based / 'flat'), and the best offset.
+        """
+        classes = self.n_classes
+        if not include_flat and self.has_flat_motif:
+            classes -= 1
+
+        total_score, best_class, best_offset = self._get_score_class_and_offset(peptide, classes)
+
+        if include_flat and self.has_flat_motif and best_class == self.n_classes - 1:
+            best_class_label = "flat"
+        else:
+            best_class_label = str(best_class + 1)
+
+        return total_score, best_class_label, best_offset
+
+    def predict(self, peptides: list[str] | pd.Series, include_flat: bool = True) -> pd.DataFrame:
+        """Score all peptides in a list.
+
+        Applies function score_peptide() to the peptides.
+
+        Args:
+            peptides: The peptides to be scored.
+            include_flat: Whether to include the flat motif in the sum of scores.
+
+        Returns:
+            A DataFrame containing the following columns:
+            - 'score': The total score per peptide (sum over all classes and offsets).
+            - 'best_class': The best class (1-based / 'flat') per peptide.
+            - 'best_offset': The best offset (0-based) per peptide.
+
+        Raises:
+            NotFittedError: If the model has not yet been fitted.
+        """
+        if not self.is_fitted:
+            raise NotFittedError()
+
+        return pd.DataFrame(
+            [self.score_peptide(peptide, include_flat=include_flat) for peptide in peptides],
+            columns=["score", "best_class", "best_offset"],
+        )
+
+    @abstractmethod
+    def _initialize_class_weights(self) -> np.ndarray:
+        """Initialize class weights."""
+
+    @abstractmethod
+    def _get_score_class_and_offset(self, peptide: str, classes: int) -> tuple[float, int, int]:
+        """Compute the total score, index of the best class index, and best offset.
+
+        Args:
+            peptide: The peptide to be scored.
+            classes: The number of classes to include (i.e., with or without flat motif).
+
+        Returns:
+            tuple: The score, index of the best class index, and best offset.
+        """
 
 
-class DeconvolutionModelMHC2(DeconvolutionModel):
+class DeconvolutionModelMHC2(BaseDeconvolutionModelMHC2):
     """MHC2 deconvolution model.
 
     This class holds the model and training parameters, as well as the position probability
@@ -245,28 +393,12 @@ class DeconvolutionModelMHC2(DeconvolutionModel):
                 to one of the available backgrounds.
             has_flat_motif: Whether the model includes a flat motif.
         """
-        self.alphabet = alphabet
-        self.n_alphabet = len(alphabet)
-        self.alphabet_index = {a: i for i, a in enumerate(alphabet)}
-
-        self.motif_length = motif_length
-
-        self.number_of_classes = number_of_classes
-        self.n_classes = number_of_classes + (1 if has_flat_motif else 0)
-
-        self.max_sequence_length = max_sequence_length
-
-        self.background = Background(background)
-
-        self.has_flat_motif = has_flat_motif
-
         self.aligned_offsets = AlignedOffsets(motif_length, max_sequence_length)
         self.n_offsets = self.aligned_offsets.get_number_of_offsets()
-
-        self.training_params: dict[str, Any] = {}
-        self.is_fitted = False
-
-        self._initialize_arrays()
+        self.max_sequence_length = max_sequence_length
+        super().__init__(
+            alphabet, motif_length, number_of_classes, background, has_flat_motif=has_flat_motif
+        )
 
     @property
     def num_of_parameters(self) -> int:
@@ -380,25 +512,6 @@ class DeconvolutionModelMHC2(DeconvolutionModel):
         )
         save_csv(df_class_weights, directory / f"class_weights_{self.n_classes-1}.csv", force=force)
 
-    def _initialize_arrays(self) -> None:
-        """Initialize arrays.
-
-        Initializes arrays for position probability and scoring matrices, as well as for the class
-        and offset weights.
-        """
-        # position probability matrices
-        self.ppm = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
-
-        # position-specific scoring matrix
-        self.pssm = np.zeros_like(self.ppm)
-
-        # probalitities of the classes and offsets
-        self.class_weights = np.zeros((self.n_classes, self.n_offsets))
-
-    def recompute_pssm(self) -> None:
-        """Update the PSSMs using the current PPMs and the background."""
-        self.pssm[:] = self.ppm / self.background.frequencies
-
     def get_offset_list(self, length: int) -> list[int]:
         """List of valid aligned offsets for a specified length.
 
@@ -410,64 +523,56 @@ class DeconvolutionModelMHC2(DeconvolutionModel):
         """
         return self.aligned_offsets.get_offset_list(length)
 
-    def score_peptide(self, peptide: str, include_flat: bool = False) -> float:
-        """Score a peptide with this model.
+    def _initialize_class_weights(self) -> np.ndarray:
+        """Initialize class weights."""
+        # probalitities of the classes and offsets
+        return np.zeros((self.n_classes, self.n_offsets))
 
-        The calculates the sum of scores over all classes and all possible offsets. For each class
-        and offset, the score is determined by applying the classes' PSSM and multiplying this with
-        the class-offset weight.
+    def _get_score_class_and_offset(self, peptide: str, classes: int) -> tuple[float, int, int]:
+        """Compute the total score, index of the best class index, and best offset.
 
         Args:
             peptide: The peptide to be scored.
-            include_flat: Whether to include the flat motif in the sum of scores.
+            classes: The number of classes to include (i.e., with or without flat motif).
 
         Returns:
-            The score.
+            tuple: The score, index of the best class index, and best offset.
         """
         # TODO: think about how to handle such peptides
         if len(peptide) > self.max_sequence_length:
-            return 0.0
+            raise ValueError(
+                f"peptide {peptide} is longer than maximal sequence length of "
+                f"{self.max_sequence_length}"
+            )
 
         offset_list = self.aligned_offsets.get_offset_list(len(peptide))
 
-        classes = self.n_classes
-        if not include_flat and self.has_flat_motif:
-            classes -= 1
+        total_score = 0.0
 
-        score = 0.0
+        best_prob = float("-inf")
+        best_class = 0
+        best_offset = 0
 
         for c, (i, o) in product(range(classes), enumerate(offset_list)):
             prob = self.class_weights[c, o]
             for k in range(self.motif_length):
                 prob *= self.pssm[c, k, self.alphabet_index[peptide[i + k]]]
-            score += prob
 
-        return score
+            if prob > best_prob:
+                best_prob = prob
+                best_class = c
+                best_offset = o
 
-    def predict(self, peptides: list[str], include_flat: bool = False) -> np.ndarray:
-        """Score all peptides in a list.
+            total_score += prob
 
-        Applies function score_peptide() to the peptides.
-
-        Args:
-            peptides: The peptides to be scored.
-            include_flat: Whether to include the flat motif in the sum of scores.
-
-        Returns:
-            The scores.
-
-        Raises:
-            NotFittedError: If the model has not yet been fitted.
-        """
-        if not self.is_fitted:
-            raise NotFittedError()
-
-        return np.asarray(
-            [self.score_peptide(peptide, include_flat=include_flat) for peptide in peptides]
+        return (
+            total_score,
+            best_class,
+            self.aligned_offsets.get_offset_in_sequence(len(peptide), best_offset),
         )
 
 
-class DeconvolutionModelMHC2NoOffsetWeights(DeconvolutionModel):
+class DeconvolutionModelMHC2NoOffsetWeights(BaseDeconvolutionModelMHC2):
     """MHC2 deconvolution model without offset weights.
 
     This class holds the model and training parameters, as well as the position probability
@@ -495,22 +600,9 @@ class DeconvolutionModelMHC2NoOffsetWeights(DeconvolutionModel):
                 to one of the available backgrounds.
             has_flat_motif: Whether the model includes a flat motif.
         """
-        self.alphabet = alphabet
-        self.n_alphabet = len(alphabet)
-        self.alphabet_index = {a: i for i, a in enumerate(alphabet)}
-
-        self.motif_length = motif_length
-
-        self.number_of_classes = number_of_classes
-        self.n_classes = number_of_classes + (1 if has_flat_motif else 0)
-
-        self.background = Background(background)
-
-        self.has_flat_motif = has_flat_motif
-
-        self.is_fitted = False
-
-        self._initialize_arrays()
+        super().__init__(
+            alphabet, motif_length, number_of_classes, background, has_flat_motif=has_flat_motif
+        )
 
     @property
     def num_of_parameters(self) -> int:
@@ -619,82 +711,45 @@ class DeconvolutionModelMHC2NoOffsetWeights(DeconvolutionModel):
         )
         save_csv(df_class_weights, directory / f"class_weights_{self.n_classes-1}.csv", force=force)
 
-    def _initialize_arrays(self) -> None:
-        """Initialize arrays.
+    def _initialize_class_weights(self) -> np.ndarray:
+        """Initialize class weights."""
+        return np.zeros(self.n_classes)
 
-        Initializes arrays for the position probability and scoring matrices, as well as for the
-        class weights.
-        """
-        # position probability matrices
-        self.ppm = np.zeros((self.n_classes, self.motif_length, self.n_alphabet))
-
-        # position-specific scoring matrix
-        self.pssm = np.zeros_like(self.ppm)
-
-        # probalitities of the classes and offsets
-        self.class_weights = np.zeros(self.n_classes)
-
-    def recompute_pssm(self) -> None:
-        """Update the PSSMs using the current PPMs and the background."""
-        self.pssm[:] = self.ppm / self.background.frequencies
-
-    def score_peptide(self, peptide: str, include_flat: bool = False) -> float:
-        """Score a peptide with this model.
-
-        The calculates the sum of scores over all classes and all possible offsets. For each class
-        and offset, the score is determined by applying the classes' PSSM and multiplying this with
-        the class weight.
+    def _get_score_class_and_offset(self, peptide: str, classes: int) -> tuple[float, int, int]:
+        """Compute the total score, index of the best class index, and best offset.
 
         Args:
             peptide: The peptide to be scored.
-            include_flat: Whether to include the flat motif in the sum of scores.
+            classes: The number of classes to include (i.e., with or without flat motif).
 
         Returns:
-            The score.
+            tuple: The score, index of the best class index, and best offset.
         """
-        # TODO: think about how to handle such peptides
-        if len(peptide) < self.motif_length:
-            return 0.0
+        total_score = 0.0
 
-        classes = self.n_classes
-        if not include_flat and self.has_flat_motif:
-            classes -= 1
-
-        score = 0.0
+        best_prob = float("-inf")
+        best_class = 0
+        best_offset = 0
 
         for c in range(classes):
             current_max = float("-inf")
             for i in range(0, len(peptide) - self.motif_length + 1):
                 prob = self.class_weights[c]
+
                 for k in range(self.motif_length):
                     prob *= self.pssm[c, k, self.alphabet_index[peptide[i + k]]]
+
                 if prob > current_max:
                     current_max = prob
-            score += current_max
 
-        return score
+                if prob > best_prob:
+                    best_prob = prob
+                    best_class = c
+                    best_offset = i
 
-    def predict(self, peptides: list[str], include_flat: bool = False) -> np.ndarray:
-        """Score all peptides in a list.
+            total_score += current_max
 
-        Applies function score_peptide() to the peptides.
-
-        Args:
-            peptides: The peptides to be scored.
-            include_flat: Whether to include the flat motif in the sum of scores.
-
-        Returns:
-            The scores.
-
-        Raises:
-            NotFittedError: If the model has not yet been fitted.
-        """
-        if not self.is_fitted:
-            raise NotFittedError()
-
-        return np.asarray(
-            [self.score_peptide(peptide, include_flat=include_flat) for peptide in peptides]
-        )
+        return total_score, best_class, best_offset
 
 
 if __name__ == "__main__":
@@ -710,7 +765,7 @@ if __name__ == "__main__":
         header=None,
         names=["peptide"],
     )
-    df["score"] = model.predict(df["peptide"])
+    df[["score", "best_class", "best_offset"]] = model.predict(df["peptide"])
 
     print(df)
     save_csv(df, REPO_DIRECTORY / "validation" / "local" / f"{input_name}_scored.csv", force=True)

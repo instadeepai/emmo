@@ -98,7 +98,7 @@ def deconvolute_mhc2(
     help="Local or remote output directory.",
 )
 @click.option(
-    "--use_existing_background",
+    "--existing_background_name",
     "-b",
     type=str,
     required=False,
@@ -117,7 +117,7 @@ def deconvolute_per_allele_mhc2(
     ctx: click.core.Context,
     input_file: Path | CloudPath,
     output_directory: Path | CloudPath,
-    use_existing_background: str | None,
+    existing_background_name: str | None,
     peptide_column: str,
     allele_alpha_column: str,
     allele_beta_column: str,
@@ -138,7 +138,7 @@ def deconvolute_per_allele_mhc2(
 
     background = _initialize_background(
         output_directory,
-        use_existing_background,
+        existing_background_name,
         df[peptide_column],
         force,
         skip_existing,
@@ -231,7 +231,7 @@ def plot_deconvolution_per_allele_mhc2(
     help="Local or remote output directory.",
 )
 @click.option(
-    "--use_existing_background",
+    "--existing_background_name",
     "-b",
     type=str,
     required=False,
@@ -257,7 +257,7 @@ def plot_deconvolution_per_allele_mhc2(
 def deconvolute_for_cleavage_mhc2(
     input_file: Path | CloudPath,
     output_directory: Path | CloudPath,
-    use_existing_background: str | None,
+    existing_background_name: str | None,
     peptide_column: str | None,
     motif_length: int,
     min_classes: int,
@@ -285,7 +285,7 @@ def deconvolute_for_cleavage_mhc2(
 
     background = _initialize_background(
         output_directory,
-        use_existing_background,
+        existing_background_name,
         sequence_manager.sequences,
         force,
         skip_existing,
@@ -411,7 +411,7 @@ def _run_deconvolutions_mhc2(
 
 def _initialize_background(
     output_directory: Path | CloudPath,
-    use_existing_background: str | None,
+    existing_background_name: str | None,
     sequences: pd.Series | list[str] | None,
     force: bool,
     skip_existing: bool,
@@ -421,7 +421,7 @@ def _initialize_background(
     Args:
         output_directory: The output directory where to write the results or where parts of the
             results already exist.
-        use_existing_background: The name of a background distribution that is available in the
+        existing_background_name: The name of a background distribution that is available in the
             package.
         sequences: Sequences from which to calculate a background distribution.
         force: Whether existing deconvolution results shall be overwritten.
@@ -429,7 +429,7 @@ def _initialize_background(
 
     Raises:
         ValueError: If the output directory contains a background distribution and its name and
-            'use_existing_background' do not match (and force is False).
+            'existing_background_name' do not match (and force is False).
         RuntimeError: If the background distribution could not be initialized.
 
     Returns:
@@ -441,20 +441,20 @@ def _initialize_background(
         Background.load(background_file_path) if background_file_path.exists() else None
     )
 
-    if use_existing_background is not None:
+    if existing_background_name is not None:
         if (
             not force
             and existing_background is not None
-            and existing_background.name != use_existing_background
+            and existing_background.name != existing_background_name
         ):
             raise ValueError(
                 "background names do not match: "
-                f"'use_existing_background={use_existing_background}' vs "
+                f"'existing_background_name={existing_background_name}' vs "
                 f"'{existing_background.name}' in existing file {background_file_path}, "
                 "use --force to overwrite"
             )
 
-        background = Background(use_existing_background)
+        background = Background(existing_background_name)
         background.save(background_file_path, force=True)
         log.info(f"Using existing background frequencies '{background.name}'")
     elif skip_existing and existing_background is not None:

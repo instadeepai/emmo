@@ -5,6 +5,7 @@ This predictor is similar to MixMHC2pred (Racle et al. 2019).
 from __future__ import annotations
 
 from typing import Any
+from typing import TypedDict
 
 import numpy as np
 import pandas as pd
@@ -16,7 +17,7 @@ from emmo.io.file import Openable
 from emmo.io.file import save_json
 from emmo.io.output import write_matrix
 from emmo.models.cleavage import CleavageModel
-from emmo.models.deconvolution import DeconvolutionModelMHC2 as Model
+from emmo.models.deconvolution import DeconvolutionModelMHC2
 from emmo.pipeline.background import Background
 from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
@@ -30,6 +31,18 @@ from emmo.utils.offsets import AlignedOffsets
 from emmo.utils.sequence_distance import nearest_neighbors
 
 log = logger.get(__name__)
+
+
+class SelectedModel(TypedDict, total=False):
+    """Dictionary defining the selected model and motif for a specific allele."""
+
+    classes: int
+    motif: int
+    model_path: Openable
+    comment: str
+    model: DeconvolutionModelMHC2
+    effective_peptide_number: float
+    motif_weight: float
 
 
 class PredictorMHC2:
@@ -145,7 +158,7 @@ class PredictorMHC2:
     @classmethod
     def compile_from_selected_models(
         cls,
-        selected_models: dict[str, dict[str, int | Openable]],
+        selected_models: dict[str, SelectedModel],
         cleavage_model_path: Openable,
         background: BackgroundType | None,
         peptides_path: Openable | None = None,
@@ -186,20 +199,16 @@ class PredictorMHC2:
         ppms = {}
 
         for allele, selection in selected_models.items():
-            model_path = AnyPath(selection["model_path"])
-            model = Model.load(model_path)
-
+            model = DeconvolutionModelMHC2.load(selection["model_path"])
             loaded_binding_models[allele] = model
             selection_details[allele] = selection.copy()
             del selection_details[allele]["model_path"]
 
             motif_idx = selection["motif"]
-            if not isinstance(motif_idx, int):
-                raise TypeError("'motif' must be an integer")
 
             if recompute_ppms_from_best_responsibility:
                 try:
-                    ppms[allele] = cls._recompute_ppms(model_path, motif_idx)
+                    ppms[allele] = cls._recompute_ppms(selection["model_path"], motif_idx)
                 except NoSequencesError:
                     log.warning(
                         f"Could not recompute PPM for allele {allele} because no peptides were "
@@ -265,8 +274,8 @@ class PredictorMHC2:
     @classmethod
     def _compute_averaged_offset_weights(
         cls,
-        loaded_binding_models: dict[str, Model],
-        selection_details: dict[str, dict[str, Any]],
+        loaded_binding_models: dict[str, DeconvolutionModelMHC2],
+        selection_details: dict[str, SelectedModel],
         peptides_path: Openable | None = None,
     ) -> np.ndarray:
         """Weighted average of the offset weights over all models.
@@ -293,7 +302,7 @@ class PredictorMHC2:
         effective_peptide_counts_per_allele = {}
 
         # if peptides path is provided, recompute the effective peptide count from there
-        if peptides_path:
+        if peptides_path is not None:
             for file in AnyPath(peptides_path).iterdir():
                 allele = file.stem
                 sm = SequenceManager.load_from_txt(file)

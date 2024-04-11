@@ -3,18 +3,23 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import click
+import pandas as pd
 from cloudpathlib import AnyPath
 from cloudpathlib import CloudPath
 
+from emmo.constants import MHC2_BINDING_CORE_SIZE
 from emmo.constants import MODELS_DIRECTORY
 from emmo.io.file import load_csv
 from emmo.io.file import load_yml
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
 from emmo.io.output import find_deconvolution_results_mhc2
+from emmo.models.deconvolution import DeconvolutionModelMHC2
 from emmo.models.prediction import PredictorMHC2
+from emmo.models.prediction import SelectedModel
 from emmo.pipeline.background import Background
 from emmo.utils import logger
 from emmo.utils.alleles import parse_allele_pair
@@ -100,17 +105,10 @@ def predict_mhc2(
     length_scoring: bool,
 ) -> None:
     """Run the prediction for MHC2 peptides and alleles."""
-    if output_file.exists():
-        if not force:
-            raise FileExistsError(
-                f"the output file {output_file} already exists, use --force to overwrite"
-            )
-        elif output_file.is_dir():
-            raise ValueError(f"the output path {output_file} exists and is a directory")
+    _check_output_file_path(output_file, force)
 
     model_path = _get_model_path(model)
     predictor = PredictorMHC2.load(model_path)
-
     model_name = model_name if model_name is not None else model_path.name
 
     df = load_csv(input_file)
@@ -154,8 +152,8 @@ def predict_mhc2(
     required=False,
     default=None,
     help=(
-        "Path to the local or remote YAML file containing the motifs to be selected for the "
-        "predictor."
+        "Path to the local or remote YAML file containing the models and motifs to be selected"
+        " for the predictor."
     ),
 )
 @click.option(
@@ -223,26 +221,9 @@ def compile_predictor_mhc2(
     predictor_name = f"{name_prefix}_{ppm_mode}_{time_stamp}"
     predictor_directory = output_directory / predictor_name
 
-    available_models = {
-        (row["allele_alpha"], row["allele_beta"], row["number_of_classes"]): row["model_path"]
-        for _, row in find_deconvolution_results_mhc2(input_directory).iterrows()
-    }
-
-    # by default, select motif from deconvolution runs with one class
-    selected_motifs = {
-        f"{allele_alpha}-{allele_beta}": {
-            "classes": number_of_classes,
-            "motif": 1,
-            "model_path": model_path,
-        }
-        for (allele_alpha, allele_beta, number_of_classes), model_path in available_models.items()
-        if number_of_classes == 1
-    }
-
-    # apply the custom motif selection from the YAML file
-    if selection_path is not None:
-        for allele, selection in load_yml(selection_path).items():
-            _select_alternative_motifs(allele, selection, selected_motifs, available_models)
+    # select the model either through the selection file or by using the default trained using only
+    # one class
+    selected_models = _select_models(input_directory, selection_path)
 
     # try to load the amino acid background distribution
     background_path = input_directory / "background.json"
@@ -257,11 +238,11 @@ def compile_predictor_mhc2(
         )
 
     predictor = PredictorMHC2.compile_from_selected_models(
-        selected_motifs,
+        selected_models,
         cleavage_model_path,
         background,
         peptides_path=None,
-        motif_length=9,
+        motif_length=MHC2_BINDING_CORE_SIZE,
         length_distribution=None,
         recompute_ppms_from_best_responsibility=recompute_ppms,
     )
@@ -272,6 +253,123 @@ def compile_predictor_mhc2(
     if plot:
         log.info("Plotting MHC2 predictor ...")
         plot_predictor_mhc2(predictor, predictor_directory / "plots")
+
+
+@click.command()
+@click.option(
+    "--input_file",
+    "-i",
+    type=AnyPath,
+    callback=callback.abort_if_not_exists,
+    required=True,
+    help="Path to remote or local input CSV file.",
+)
+@click.option(
+    "--output_file",
+    "-o",
+    type=AnyPath,
+    required=True,
+    help="Local or remote file path to save the CSV file with predictions.",
+)
+@click.option(
+    "--models_directory",
+    "-m",
+    type=AnyPath,
+    required=True,
+    callback=callback.abort_if_not_exists,
+    help="Path to the local or remote directory containing the deconvolution results.",
+)
+@click.option(
+    "--selection_path",
+    "-s",
+    type=AnyPath,
+    required=False,
+    default=None,
+    help=(
+        "Path to the local or remote YAML file containing the models and motifs to be selected "
+        "for the predictor."
+    ),
+)
+@click.option(
+    "--prefix",
+    "-p",
+    type=str,
+    required=False,
+    default="emmo",
+    help=("The prefix of the result columns."),
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help=(
+        "If this flag is added, the deconvolution is run and output is written "
+        "even if the output directory already exists."
+    ),
+)
+def predict_from_deconvolution_models_mhc2(
+    input_file: Path | CloudPath,
+    output_file: Path | CloudPath,
+    models_directory: Path | CloudPath,
+    selection_path: Path | CloudPath | None,
+    prefix: str,
+    force: bool,
+) -> None:
+    """Run the prediction for MHC2 peptides and alleles using deconvolution models directly."""
+    _check_output_file_path(output_file, force)
+
+    # select the model either through the selection file or by using the default trained using only
+    # one class
+    selected_models = _select_models(models_directory, selection_path)
+
+    for selection in selected_models.values():
+        selection["model"] = DeconvolutionModelMHC2.load(selection["model_path"])
+    log.info("Loaded all deconvolution models")
+
+    df = load_csv(input_file)
+
+    result_columns = [
+        f"{prefix}_{col}"
+        for col in (
+            "score",
+            "best_class",
+            "best_offset",
+            "assigned_to_selected_motif",
+        )
+    ]
+    column_intersection = sorted(set(df.columns) & set(result_columns))
+    if column_intersection:
+        raise ValueError(f"Dataframe already has columns: {column_intersection}")
+
+    log.info(f"Scoring dataframe with {len(df):,} rows ...")
+    df[result_columns] = df.apply(
+        _score_with_deconvolution_models,
+        args=(selected_models,),
+        axis=1,
+        result_type="expand",
+    )
+
+    save_csv(df, output_file, index=False, force=True)
+    log.info(f"Saved results at {output_file}")
+
+
+def _check_output_file_path(output_file: Path | CloudPath, force: bool) -> None:
+    """Check if the output file path already exists.
+
+    Args:
+        output_file: Path to the local or remote output file.
+        force: Whether to overwrite the file if it already exists.
+
+    Raises:
+        FileExistsError: If the file already exists and force is False.
+        ValueError: If the path points to an existing directory.
+    """
+    if output_file.exists():
+        if not force:
+            raise FileExistsError(
+                f"the output file {output_file} already exists, use --force to overwrite"
+            )
+        elif output_file.is_dir():
+            raise ValueError(f"the output path {output_file} exists and is a directory")
 
 
 def _get_model_path(model: str) -> Path | CloudPath:
@@ -303,52 +401,166 @@ def _get_model_path(model: str) -> Path | CloudPath:
     return model_path
 
 
-def _select_alternative_motifs(
+def _select_models(
+    models_directory: Path | CloudPath,
+    selection_path: Path | CloudPath | None,
+) -> dict[str, SelectedModel]:
+    """Find deconvolution models in a directory and possibly override the default selection.
+
+    For each allele, the single motif in the deconvolution run with only one class is selected from
+    the models found in 'models_directory'. Optionally, the selected model and motif can be
+    overridden for individual alleles and alleles can be removed by providing a path to a YAML file
+    ('selection_path') that defines these modifications.
+
+    Args:
+        models_directory: Path to the local or remote directory containing the deconvolution models.
+        selection_path: Path to the local or remote YAML file containing the models and motifs to
+            be selected.
+
+    Returns:
+        The selected models and motifs as a dictionary containing as keys the alleles
+        ('<alpha_chain>-<beta_chain>') and as values dictionaries with keys 'classes', 'motif', and
+        'model_path'.
+    """
+    available_models = {
+        (row["allele_alpha"], row["allele_beta"], row["number_of_classes"]): row["model_path"]
+        for _, row in find_deconvolution_results_mhc2(models_directory).iterrows()
+    }
+
+    num_allele_pairs = len(
+        {(allele_alpha, allele_beta) for allele_alpha, allele_beta, _ in available_models}
+    )
+
+    log.info(f"Found {len(available_models)} models covering {num_allele_pairs} allele pairs")
+
+    # by default, select motif from deconvolution runs with one class
+    selected_models: dict[str, SelectedModel] = {
+        f"{allele_alpha}-{allele_beta}": {
+            "classes": number_of_classes,
+            "motif": 1,
+            "model_path": model_path,
+        }
+        for (allele_alpha, allele_beta, number_of_classes), model_path in available_models.items()
+        if number_of_classes == 1
+    }
+
+    # apply the custom model and motif selection from the YAML file
+    if selection_path is not None:
+        for allele, selection in load_yml(selection_path).items():
+            _select_alternative_models(allele, selection, selected_models, available_models)
+
+    log.info(f"Selected models for {len(selected_models)} alleles")
+
+    return selected_models
+
+
+def _convert_to_int(value: Any) -> int:
+    """Check if 'value' represents an integer and, if yes, return this integer.
+
+    Args:
+        value: Value to check.
+
+    Raises:
+        TypeError: If 'value' is not of type int, str, or float.
+
+    Returns:
+        The value converted to an int.
+    """
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, float):
+        value_int = int(value)
+        if float(value_int) == value:
+            return value_int
+
+    if isinstance(value, str):
+        return int(value)
+
+    raise TypeError(f"'value' must be of type int, str, or float, but is {type(value)}")
+
+
+def _select_alternative_models(
     allele: str,
     selection: dict[str, int | Openable],
-    selected_motifs: dict[str, dict[str, int | Openable]],
+    selected_models: dict[str, SelectedModel],
     available_models: dict[tuple[str, str, int], Openable],
 ) -> None:
-    """Select alternative motifs as defined in the YAML file.
+    """Select alternative models and motifs as defined in the YAML file.
 
     Args:
         allele: The allele (alpha and beta chain separated by a hyphen).
         selection: The selected class number and motif parsed from the YAML file.
-        selected_motifs: The currently selected motifs for each allele.
+        selected_models: The currently selected  models and motifs for each allele.
         available_models: A dict with all available alleles and numbers of classes as keys and the
             corresponding model paths as values.
 
     Raises:
         ValueError: If keys 'classes' or 'motif' are missing in 'selection'.
-        TypeError: If keys 'classes' or 'motif' is not an integer.
+        ValueError: If the value of 'motif' is smaller than 1.
         ValueError: If the value of 'classes' is smaller than that of 'motif'.
         ValueError: If the selected number of classes is not among the available models.
     """
     allele_alpha, allele_beta = parse_allele_pair(allele)
     allele = f"{allele_alpha}-{allele_beta}"
 
-    if not selection.pop("keep", True):
-        if allele not in selected_motifs:
+    if not selection.get("keep", True):
+        if allele not in selected_models:
             log.warning(f"allele {allele} not available for removal")
         else:
-            del selected_motifs[allele]
+            del selected_models[allele]
             log.info(f"Removed allele {allele} from selection")
         return
 
     if "classes" not in selection or "motif" not in selection:
         raise ValueError(f"'classes' and 'motif' need to be selected for allele {allele}")
 
-    classes = selection["classes"]
-    motif = selection["motif"]
-    if not isinstance(motif, int) or not isinstance(classes, int):
-        raise TypeError("'classes' and 'motif' must be integers")
+    classes = _convert_to_int(selection["classes"])
+    motif = _convert_to_int(selection["motif"])
 
+    if motif < 1:
+        raise ValueError(f"'motif' < 1 for allele {allele}")
     if classes < motif:
         raise ValueError(f"'classes' < 'motif' for allele {allele}")
 
     try:
-        selection["model_path"] = available_models[allele_alpha, allele_beta, classes]
+        selected_models[allele]["model_path"] = available_models[allele_alpha, allele_beta, classes]
     except KeyError:
         raise ValueError(f"no model with {classes} classes found for allele {allele}")
 
-    selected_motifs[allele] = selection
+    selected_models[allele]["classes"] = classes
+    selected_models[allele]["motif"] = motif
+    if "comment" in selection:
+        selected_models[allele]["comment"] = str(selection["comment"])
+
+
+def _score_with_deconvolution_models(
+    row: pd.Series,
+    selected_models: dict[str, SelectedModel],
+) -> tuple[float, str, str, bool]:
+    """Score a row with the deconvolution model selected for the respective allele.
+
+    Args:
+        row: The row in the dataframe to score containing 'peptide', 'allele_alpha', and
+            'allele_beta'.
+        selected_models: The selected models and motifs for each allele.
+
+    Returns:
+        The total score given the respective devolution model, the best class, the best offset (for
+        this class), and whether the best class is equal to the motif for the deconvolution model.
+    """
+    peptide = row["peptide"]
+    allele_alpha = row["allele_alpha"]
+    allele_beta = row["allele_beta"]
+    allele = f"{allele_alpha}-{allele_beta}"
+
+    if allele not in selected_models:
+        return float("nan"), "", "", False
+
+    model = selected_models[allele]["model"]
+    selected_motif = str(selected_models[allele]["motif"])
+
+    score, best_class, best_offset = model.score_peptide(peptide, include_flat=True)
+
+    # convert best_offset to str such that it is written to the csv file without a decimal point
+    return score, best_class, str(best_offset), best_class == selected_motif
