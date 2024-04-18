@@ -184,7 +184,7 @@ def predict_mhc2(
     "-r",
     is_flag=True,
     help=(
-        "If this flag is set, the position probability matrices are recomputed from the core"
+        "If this flag is set, the position probability matrices are recomputed from the core "
         "predictions in the deconvolution runs. The 'responsibilities.csv' file must be contained "
         "in the respective deconvolution models directories."
     ),

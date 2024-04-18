@@ -1,0 +1,91 @@
+site_name: EMMo
+site_description: emmo
+site_author: BioNTech and InstaDeep Developers
+site_url: https://instadeep.gitlab.io/emmo
+site_dir: public
+repo_name: instadeep/emmo
+repo_url: https://gitlab.com/instadeep/emmo
+edit_uri: blob/develop/docs/
+use_directory_urls: false
+
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: default
+      primary: teal
+      accent: deep purple
+      toggle:
+        icon: material/toggle-switch-off-outline
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: deep purple
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/gitlab
+  font:
+    text: Avenir Next
+  features:
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+
+plugins:
+  - search
+  - git-revision-date
+
+# To be able to use it inside docker
+dev_addr: 0.0.0.0:8000
+
+markdown_extensions:
+  # support emojis
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator:
+        !!python/name:material.extensions.emoji.to_svg # both following extensions add lines into code blocks
+
+
+  - pymdownx.highlight:
+      linenums: true
+  - pymdownx.superfences
+  # support pad width = 2, as formatted with prettier
+  - mdx_truly_sane_lists
+  # Allow to use collapsible call-outs
+  # https://squidfunk.github.io/mkdocs-material/reference/admonitions/
+  - admonition
+  - pymdownx.details
+  # support LaTeX
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+copyright: Copyright &copy; 2024 EMMo
+
+nav:
+  - Getting Started:
+      - Overview: index.md
+      - installation.md
+      - CONTRIBUTING.md
+  - Usage:
+      - As a Command-line Tool:
+          - Overview: usage/cli.md
+          - usage/cli_deconvolution.md
+          - usage/cli_prediction.md
+      - As a Python Library: usage/library.md
+  - Explanations:
+      - explanations/em_algorithm.md
+      - explanations/prediction_mhc2.md
+      - explanations/panallelic_prediction.md
+      - explanations/remote_files.md
+  - Models:
+      - General: models/general.md
+      - 2020: models/2020.md
+      - 2023-12: models/2023.md
