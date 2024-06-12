@@ -162,7 +162,7 @@ def test_initialization_with_unknown_amino_acids(
 def test_initialization_with_alternative_alphabet(
     alphabet: str, example_sequences: list[str]
 ) -> None:
-    """Test that initialization of SequenceManager raises an error for unknown amino acids."""
+    """Test that initialization of SequenceManager works for newly added amino acids."""
     sequences = example_sequences + ["ACDXXXXX"]
     sequence_manager = SequenceManager(sequences, alphabet=alphabet)
 
@@ -175,9 +175,9 @@ def test_load_from_txt(txt_file_path: Path, example_sequences: list[str]) -> Non
 
     assert sequence_manager.sequences == example_sequences
     assert sequence_manager.classes is None
-    assert sequence_manager.number_of_sequences() == len(example_sequences)
-    assert sequence_manager.get_minimal_length() == min([len(seq) for seq in example_sequences])
-    assert sequence_manager.get_maximal_length() == max([len(seq) for seq in example_sequences])
+    assert sequence_manager.number_of_sequences == len(example_sequences)
+    assert sequence_manager.min_length == min([len(seq) for seq in example_sequences])
+    assert sequence_manager.max_length == max([len(seq) for seq in example_sequences])
 
 
 def test_load_from_csv(
@@ -191,8 +191,8 @@ def test_load_from_csv(
     assert sequence_manager.sequences == example_sequences
     assert sequence_manager.classes == example_classes
     assert len(sequence_manager.sequences) == len(sequence_manager.classes)
-    assert sequence_manager.get_minimal_length() == min([len(seq) for seq in example_sequences])
-    assert sequence_manager.get_maximal_length() == max([len(seq) for seq in example_sequences])
+    assert sequence_manager.min_length == min([len(seq) for seq in example_sequences])
+    assert sequence_manager.max_length == max([len(seq) for seq in example_sequences])
 
 
 def test_load_from_csv_wo_classes(
@@ -214,41 +214,41 @@ def test_sequences_as_indices(
     assert example_sequence_manager.sequences_as_indices() == expected_indices
 
 
-def test_get_frequencies(
+def test_frequencies(
     example_sequence_manager: SequenceManager, expected_amino_acid_frequencies: list[float]
 ) -> None:
-    """Test that 'get_frequencies' works as expected."""
-    assert np.allclose(example_sequence_manager.get_frequencies(), expected_amino_acid_frequencies)
+    """Test that 'frequencies' works as expected."""
+    assert np.allclose(example_sequence_manager.frequencies, expected_amino_acid_frequencies)
 
 
-def test_get_size_sorted_sequences(
+def test_size_sorted_sequences(
     example_sequence_manager: SequenceManager, expected_size_sorted_sequences: dict[int, list[str]]
 ) -> None:
-    """Test that 'get_size_sorted_sequences' works as expected."""
-    assert example_sequence_manager.get_size_sorted_sequences() == expected_size_sorted_sequences
+    """Test that 'size_sorted_sequences' works as expected."""
+    assert example_sequence_manager.size_sorted_sequences == expected_size_sorted_sequences
 
 
-def test_get_size_sorted_arrays(
+def test_size_sorted_arrays(
     example_sequence_manager: SequenceManager,
     expected_size_sorted_arrays: dict[int, np.ndarray],
 ) -> None:
-    """Test that 'get_size_sorted_arrays' works as expected."""
-    size_sorted_arrays = example_sequence_manager.get_size_sorted_arrays()
+    """Test that 'size_sorted_arrays' works as expected."""
+    size_sorted_arrays = example_sequence_manager.size_sorted_arrays
 
     assert set(size_sorted_arrays) == set(expected_size_sorted_arrays)
     for length in size_sorted_arrays:
         assert np.all(size_sorted_arrays[length] == expected_size_sorted_arrays[length])
 
 
-def test_get_size_sorted_classes(
+def test_size_sorted_classes(
     example_sequences: list[str],
     example_classes: list[str],
     expected_size_sorted_classes: dict[int, list[str]],
 ) -> None:
-    """Test that 'get_size_sorted_classes' works as expected."""
+    """Test that 'size_sorted_classes' works as expected."""
     sequence_manager = SequenceManager(example_sequences, classes=example_classes)
 
-    assert sequence_manager.get_size_sorted_classes() == expected_size_sorted_classes
+    assert sequence_manager.size_sorted_classes == expected_size_sorted_classes
 
 
 def test_split_array_by_size(
@@ -269,7 +269,7 @@ def test_split_array_by_size_invalid_shape(example_sequence_manager: SequenceMan
 
     The first dimension of the array and the number of sequences must match.
     """
-    invalid_length = example_sequence_manager.number_of_sequences() + 1
+    invalid_length = example_sequence_manager.number_of_sequences + 1
     array_to_split = np.reshape(np.arange(10 * invalid_length), (invalid_length, 10))
 
     with pytest.raises(

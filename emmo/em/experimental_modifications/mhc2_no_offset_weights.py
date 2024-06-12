@@ -259,10 +259,10 @@ class VariableLengthEM:
             self._initialize_new_model()
 
             self.runners = {}
-            for length in self.sm.get_size_sorted_arrays().keys():
+            for length in self.sm.size_sorted_arrays.keys():
                 self.runners[length] = _EqualLengthHandler(
                     self.model,
-                    self.sm.get_size_sorted_arrays()[length],
+                    self.sm.size_sorted_arrays[length],
                     self.similarity_weights[length],
                 )
                 self.runners[length]._initialize(self.rng)
@@ -302,7 +302,7 @@ class VariableLengthEM:
                 f"Estimating frequencies (run {run:2}), "
                 f"{steps:4} EM steps, "
                 f"score = {score} ... "
-                f"finished {self.sm.number_of_sequences()} "
+                f"finished {self.sm.number_of_sequences} "
                 f"sequences in {elapsed_time:.4f} seconds."
             )
 
@@ -392,14 +392,14 @@ class VariableLengthEM:
         self._initialize_new_model()
 
         self.runners = {}
-        for length in self.sm.get_size_sorted_arrays().keys():
+        for length in self.sm.size_sorted_arrays.keys():
             self.runners[length] = _EqualLengthHandler(
                 self.model,
-                self.sm.get_size_sorted_arrays()[length],
+                self.sm.size_sorted_arrays[length],
                 self.similarity_weights[length],
             )
             self.runners[length]._initialize_with_known_classes(
-                self.sm.get_size_sorted_classes()[length], class_mapping
+                self.sm.size_sorted_classes[length], class_mapping
             )
 
         # initialize PPMs and class weight based on initial responsibilities
@@ -436,7 +436,7 @@ class VariableLengthEM:
         print(
             f"Estimating frequencies (single run with known classes), "
             f"{steps:4} EM steps, "
-            f" score = {score} ... finished {self.sm.number_of_sequences()}"
+            f" score = {score} ... finished {self.sm.number_of_sequences}"
             f" sequences in {elapsed_time:.4f} seconds."
         )
 

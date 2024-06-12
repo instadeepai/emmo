@@ -65,6 +65,96 @@ class SequenceManager:
 
         self._similarity_weights: dict[int, np.ndarray] = {}
 
+    @property
+    def number_of_sequences(self) -> int:
+        """The total number of sequences."""
+        return len(self.sequences)
+
+    @property
+    def size_sorted_sequences(self) -> dict[int, list[str]]:
+        """Dict mapping the sequence lengths to the corresponding sublists of sequences."""
+        if not hasattr(self, "_size_sorted_sequences"):
+            self._size_sorted_sequences: dict[int, list[str]] = defaultdict(list)
+
+            for seq in self.sequences:
+                self._size_sorted_sequences[len(seq)].append(seq)
+
+        return self._size_sorted_sequences
+
+    @property
+    def min_length(self) -> int:
+        """The minimal length among all sequences sequences."""
+        return min(self.size_sorted_sequences.keys())
+
+    @property
+    def max_length(self) -> int:
+        """The maximal length among all sequences sequences."""
+        return max(self.size_sorted_sequences.keys())
+
+    @property
+    def size_sorted_classes(self) -> dict[int, list[str]]:
+        """Dict mapping the sequence lengths to the corresponding sublists of class annotations.
+
+        Raises:
+            RuntimeError: If no class information is available.
+        """
+        if not self.classes:
+            raise RuntimeError("classes have not been set")
+
+        if not hasattr(self, "_size_sorted_classes"):
+            self._size_sorted_classes: dict[int, list[str]] = defaultdict(list)
+
+            for i, seq in enumerate(self.sequences):
+                self.size_sorted_classes[len(seq)].append(self.classes[i])
+
+        return self._size_sorted_classes
+
+    @property
+    def order_in_input_file(self) -> list[tuple[int, int]]:
+        """List for recombining arrays that have been split by the lengths of the sequences.
+
+        A list of n tuples of the form (length_i, idx_in_sublist_i) where n is the total
+        number of sequences, length_i is the length of sequence i and idx_in_sublist_i is the
+        index of the item belonging to sequence i in the sublist corresponding to length_i.
+        """
+        if not hasattr(self, "_order_in_input_file"):
+            self._order_in_input_file: list[tuple[int, int]] = []
+            counter: dict[int, int] = defaultdict(int)
+
+            for seq in self.sequences:
+                length = len(seq)
+                self._order_in_input_file.append((length, counter[length]))
+                counter[length] += 1
+
+        return self._order_in_input_file
+
+    @property
+    def size_sorted_arrays(self) -> dict[int, np.ndarray]:
+        """Dict mapping the sequence lengths to the index-encoded arrays of sequences."""
+        if not hasattr(self, "_size_sorted_arrays"):
+            self._size_sorted_arrays: dict[int, np.ndarray] = defaultdict(list)
+
+            for length, seqs in self.size_sorted_sequences.items():
+                array = np.zeros((len(seqs), length), dtype=np.uint16)
+
+                for i, seq in enumerate(seqs):
+                    for j, a in enumerate(seq):
+                        array[i, j] = self.aa2idx[a]
+
+                self._size_sorted_arrays[length] = array
+
+        return self._size_sorted_arrays
+
+    @property
+    def frequencies(self) -> np.ndarray:
+        """The frequencies of the characters in the alphabet."""
+        if not hasattr(self, "_frequencies"):
+            count_aas = Counter(itertools.chain.from_iterable(seq for seq in self.sequences))
+            total = sum(count_aas.values())  # could be replaced by counter.total() in Python 3.10
+            self._frequencies = np.array([count_aas[aa] for aa in self.alphabet]) / total
+
+        return self._frequencies
+
     @classmethod
     def load_from_txt(cls, file_path: Openable, alphabet: str = "default") -> SequenceManager:
         """Read sequences from a text file.
@@ -109,36 +199,6 @@ class SequenceManager:
 
         return cls(sequences, alphabet=alphabet, classes=classes)
 
-    def number_of_sequences(self) -> int:
-        """The total number of sequences.
-
-        Returns:
-            The total number of sequences.
-        """
-        return len(self.sequences)
-
-    def get_minimal_length(self) -> int:
-        """The minimal length among all sequences sequences.
-
-        Returns:
-            The minimal sequence length.
-        """
-        if not hasattr(self, "size_sorted_seqs"):
-            self._sort_by_size()
-
-        return self.min_length
-
-    def get_maximal_length(self) -> int:
-        """The maximal length among all sequences sequences.
-
-        Returns:
-            The maximal sequence length.
-        """
-        if not hasattr(self, "size_sorted_seqs"):
-            self._sort_by_size()
-
-        return self.max_length
-
     def sequences_as_indices(self) -> list[list[int]]:
         """The sequences encoded by the alphabet indices.
 
@@ -146,58 +206,6 @@ class SequenceManager:
             The encoded sequences.
         """
         return [[self.aa2idx[a] for a in seq] for seq in self.sequences]
-
-    def get_frequencies(self) -> np.ndarray:
-        """The frequencies of the characters in the alphabet.
-
-        Returns:
-            The frequencies.
-        """
-        if not hasattr(self, "frequencies"):
-            count_aas = Counter(itertools.chain.from_iterable(seq for seq in self.sequences))
-            total = sum(count_aas.values())  # could be replaced by counter.total() in Python 3.10
-            self.frequencies = np.array([count_aas[aa] for aa in self.alphabet]) / total
-
-        return self.frequencies
-
-    def get_size_sorted_sequences(self) -> dict[int, list[str]]:
-        """The sequences sorted by their length into a dictionary.
-
-        Returns:
-            The keys are the sequence lengths and the values are lists of sequences of the
-            respective length.
-        """
-        if not hasattr(self, "size_sorted_seqs"):
-            self._sort_by_size()
-
-        return self.size_sorted_seqs
-
-    def get_size_sorted_arrays(self) -> dict[int, np.ndarray]:
-        """The index-encoded sequences sorted by their length into a dictionary.
-
-        Returns:
-            The keys are the sequence lengths and the values are array of encoded sequences of the
-            respective length.
-        """
-        if not hasattr(self, "size_sorted_arrays"):
-            self._sort_by_size()
-
-        return self.size_sorted_arrays
-
-    def get_size_sorted_classes(self) -> dict[int, list[str]]:
-        """The class information split by length of the sequences.
-
-        Returns:
-            The keys are the sequence lengths and the values are lists of class assignments in the
-            order corresponding to the output of function 'get_size_sorted_sequences()'.
-        """
-        if not self.classes:
-            raise RuntimeError("classes have not been set")
-
-        if not hasattr(self, "size_sorted_seqs"):
-            self._sort_by_size()
-
-        return self.size_sorted_classes
 
     def split_array_by_size(self, array: np.ndarray) -> dict[int, np.ndarray]:
         """Split an array by the length of the input sequences.
@@ -218,13 +226,10 @@ class SequenceManager:
         if len(array) != len(self.sequences):
             raise ValueError("input must be an array with the same length as the list of sequences")
 
-        if not hasattr(self, "size_sorted_seqs"):
-            self._sort_by_size()
-
         additional_dimensions = array.shape[1:]
         split_arrays = {
             length: np.zeros((len(seqs), *additional_dimensions), dtype=array.dtype)
-            for length, seqs in self.size_sorted_seqs.items()
+            for length, seqs in self.size_sorted_sequences.items()
         }
 
         pos = dict.fromkeys(split_arrays, 0)
@@ -248,9 +253,6 @@ class SequenceManager:
         Returns:
             The recombined array.
         """
-        if not hasattr(self, "size_sorted_seqs"):
-            self._sort_by_size()
-
         recombined_array = None
 
         for i, (length, s) in enumerate(self.order_in_input_file):
@@ -276,35 +278,6 @@ class SequenceManager:
             self._similarity_weights[k] = similarity_weights(k, self.sequences)
 
         return self._similarity_weights[k]
-
-    def _sort_by_size(self) -> None:
-        """Initialize the sequences and encoded sequences sorted by their lengths."""
-        self.size_sorted_seqs: dict[int, list[str]] = defaultdict(list)
-        if self.classes:
-            self.size_sorted_classes: dict[int, list[str]] = defaultdict(list)
-        self.order_in_input_file: list[tuple[int, int]] = []
-
-        for i, seq in enumerate(self.sequences):
-            length = len(seq)
-
-            self.order_in_input_file.append((length, len(self.size_sorted_seqs[length])))
-            self.size_sorted_seqs[length].append(seq)
-            if self.classes:
-                self.size_sorted_classes[length].append(self.classes[i])
-
-        self.size_sorted_arrays = {}
-
-        for length, seqs in self.size_sorted_seqs.items():
-            array = np.zeros((len(seqs), length), dtype=np.uint16)
-
-            for i, seq in enumerate(seqs):
-                for j, a in enumerate(seq):
-                    array[i, j] = self.aa2idx[a]
-
-            self.size_sorted_arrays[length] = array
-
-        self.min_length = min(self.size_sorted_seqs.keys())
-        self.max_length = max(self.size_sorted_seqs.keys())
 
 
 def similarity_weights(k: int, sequences: list[str]) -> np.ndarray:

@@ -444,7 +444,7 @@ class FullEM:
         self.motif_length = motif_length
         self.N = number_of_classes
 
-        if self.motif_length not in self.sm.get_size_sorted_sequences():
+        if self.motif_length not in self.sm.size_sorted_sequences:
             raise ValueError(
                 f"no sequence with the specified motif length " f"{self.motif_length} found"
             )
@@ -462,7 +462,7 @@ class FullEM:
         )
 
         self.main_EM_runner = EqualLengthEM(
-            self.sm.get_size_sorted_arrays()[self.motif_length], len(self.sm.alphabet), self.N
+            self.sm.size_sorted_arrays[self.motif_length], len(self.sm.alphabet), self.N
         )
 
         self.main_EM_runner.run(random_seed=random_seed)
@@ -475,7 +475,7 @@ class FullEM:
             self.motif_length: self.main_EM_runner
         }
 
-        for length, seq_array in self.sm.get_size_sorted_arrays().items():
+        for length, seq_array in self.sm.size_sorted_arrays.items():
             if length == self.motif_length:
                 continue
 

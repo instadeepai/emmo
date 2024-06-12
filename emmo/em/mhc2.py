@@ -119,7 +119,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
         """
         matrix = self.current_pssm if use_pssm else self.current_ppm
         log_likelihood = 0.0
-        for length, sequences in self.sm.get_size_sorted_arrays().items():
+        for length, sequences in self.sm.size_sorted_arrays.items():
             n_sequences = sequences.shape[0]
             offset_list = self.offset_list_by_length[length]
             similarity_weights = self.similarity_weights_by_length[length]
@@ -149,7 +149,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
         self.current_ppm[: self.number_of_classes] = self.pseudocount
         self.current_class_weights[:] = 0
 
-        for length, sequences in self.sm.get_size_sorted_arrays().items():
+        for length, sequences in self.sm.size_sorted_arrays.items():
             n_sequences = sequences.shape[0]
             offset_list = self.offset_list_by_length[length]
             similarity_weights = self.similarity_weights_by_length[length]
@@ -187,7 +187,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
 
     def _expectation(self) -> None:
         """Expectation step."""
-        for length, sequences in self.sm.get_size_sorted_arrays().items():
+        for length, sequences in self.sm.size_sorted_arrays.items():
             n_sequences = sequences.shape[0]
             offset_list = self.offset_list_by_length[length]
             responsibilities = self.responsibilities_by_length[length]

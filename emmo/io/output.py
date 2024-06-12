@@ -93,7 +93,7 @@ def write_responsibilities(
     directory = AnyPath(directory)
 
     # collect the responsibilities
-    all_responsibilities = np.zeros((sequence_manager.number_of_sequences(), number_of_classes + 1))
+    all_responsibilities = np.zeros((sequence_manager.number_of_sequences, number_of_classes + 1))
 
     for i, (length, s) in enumerate(sequence_manager.order_in_input_file):
         all_responsibilities[i, :] = responsibilities[length][s, :]
@@ -144,20 +144,12 @@ def find_deconvolution_results_mhc2(directory: Openable) -> pd.DataFrame:  # noq
             continue
 
         for model_dir in allele_dir.iterdir():
-            if not model_dir.is_dir() or allele_dir.name in SKIP_DIRECTORIES:
+            if not model_dir.is_dir() or model_dir.name in SKIP_DIRECTORIES:
                 continue
 
-            # backward compatibility: the current naming convention is 'classes_{num_of_classes}',
-            # the old naming convention is 'clusters{num_of_classes}'
-            match = re.match(r"((classes_)|(clusters))([1-9]\d*)", model_dir.name)
-            if not match:
-                log.warning(
-                    f"directory '{allele_dir}' contains a subdirectory '{model_dir.name}' from "
-                    "which the number of classes could not be parsed, it will be skipped"
-                )
+            number_of_classes = _get_number_of_classes(model_dir)
+            if number_of_classes is None:
                 continue
-
-            number_of_classes = int(match.group(4))
 
             data.append(
                 {
@@ -174,3 +166,24 @@ def find_deconvolution_results_mhc2(directory: Openable) -> pd.DataFrame:  # noq
     return pd.DataFrame(data).sort_values(
         by=["allele_alpha", "allele_beta", "number_of_classes"], ignore_index=True
     )
+
+
+def _get_number_of_classes(model_dir: AnyPath) -> int | None:
+    """Get the number of classes from the directory name.
+
+    Args:
+        model_dir: Directory path.
+
+    Returns:
+        The number of classes parsed from the directory name.
+    """
+    # backward compatibility: the current naming convention is 'classes_{num_of_classes}',
+    # the old naming convention is 'clusters{num_of_classes}'
+    match = re.match(r"((classes_)|(clusters))([1-9]\d*)", model_dir.name)
+    if not match:
+        log.warning(
+            f"num. of classes could not be parsed from directory '{model_dir}', it will be skipped"
+        )
+        return None
+
+    return int(match.group(4))

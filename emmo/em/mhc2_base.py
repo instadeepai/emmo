@@ -51,13 +51,13 @@ class BaseEMRunnerMHC2(BaseRunner):
         self.current_class_weights: np.ndarray | None = None
         self.current_log_likelihood_ppm: float = float("-inf")
 
-        if self.sm.get_minimal_length() < self.motif_length:
+        if self.sm.min_length < self.motif_length:
             raise ValueError(
                 f"input contains sequences that are shorter than motif length {self.motif_length}"
             )
 
         # auxiliary class for aligning offsets
-        self.aligned_offsets = AlignedOffsets(self.motif_length, self.sm.get_maximal_length())
+        self.aligned_offsets = AlignedOffsets(self.motif_length, self.sm.max_length)
         self.n_offsets = self.aligned_offsets.get_number_of_offsets()
 
         # background amino acid distribution
@@ -169,7 +169,7 @@ class BaseEMRunnerMHC2(BaseRunner):
             self.sm.alphabet,
             self.motif_length,
             self.number_of_classes,
-            self.sm.get_maximal_length(),
+            self.sm.max_length,
             self.background,
             has_flat_motif=True,
         )

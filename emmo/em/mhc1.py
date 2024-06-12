@@ -87,7 +87,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
         self.class_weights_by_length = {}
         self.n_positions_by_length = {}
         self.c_positions_by_length = {}
-        for length, sequences in self.sm.get_size_sorted_sequences().items():
+        for length, sequences in self.sm.size_sorted_sequences.items():
             self.class_weights_by_length[length] = np.zeros(self.n_classes)
             self.n_positions_by_length[length] = np.zeros(
                 (len(sequences), self.n_classes), dtype=np.int8
@@ -131,7 +131,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
             Log likelihood.
         """
         log_likelihood = 0.0
-        for length, sequences in self.sm.get_size_sorted_arrays().items():
+        for length, sequences in self.sm.size_sorted_arrays.items():
             n_sequences = sequences.shape[0]
             class_weights = self.class_weights_by_length[length]
             n_pos = self.n_positions_by_length[length]
@@ -186,7 +186,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
         """Maximization step."""
         self.current_ppm[: self.number_of_classes] = self.pseudocount
 
-        for length, sequences in self.sm.get_size_sorted_arrays().items():
+        for length, sequences in self.sm.size_sorted_arrays.items():
             n_sequences = sequences.shape[0]
             class_weights = self.class_weights_by_length[length]
             n_pos = self.n_positions_by_length[length]
@@ -229,7 +229,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
 
     def _expectation(self) -> None:
         """Expectation step."""
-        for length in self.sm.get_size_sorted_arrays().keys():
+        for length in self.sm.size_sorted_arrays.keys():
             if length == self.motif_length:
                 self._expectation_equal_to_motif()
             elif length < self.motif_length:
@@ -240,7 +240,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
     def _expectation_equal_to_motif(self) -> None:
         """Expectation step for sequences of the same length as the motif."""
         length = self.motif_length
-        sequences = self.sm.get_size_sorted_arrays()[length]
+        sequences = self.sm.size_sorted_arrays[length]
         n_sequences = sequences.shape[0]
         class_weights = self.class_weights_by_length[length]
         responsibilities = self.responsibilities_by_length[length]
@@ -259,7 +259,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
         Args:
             length: Length of the sequences.
         """
-        sequences = self.sm.get_size_sorted_arrays()[length]
+        sequences = self.sm.size_sorted_arrays[length]
         n_sequences = sequences.shape[0]
         class_weights = self.class_weights_by_length[length]
         responsibilities = self.responsibilities_by_length[length]
@@ -284,7 +284,7 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
         Args:
             length: Length of the sequences.
         """
-        sequences = self.sm.get_size_sorted_arrays()[length]
+        sequences = self.sm.size_sorted_arrays[length]
         n_sequences = sequences.shape[0]
         class_weights = self.class_weights_by_length[length]
         responsibilities = self.responsibilities_by_length[length]

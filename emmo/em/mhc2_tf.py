@@ -416,11 +416,11 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
 
     def _compute_padding(self) -> None:
         """Initialize the padding for sequences and offsets, and the corresponding masks."""
-        max_seq_len = self.sm.get_maximal_length()
-
         # Pad all sequences on the rights with zeros. This needs masking later because zero is also
         # a valid amino acid.
-        self.padded_sequences = [seq + (max_seq_len + len(seq)) * [0] for seq in self.sequences]
+        self.padded_sequences = [
+            seq + (self.sm.max_length + len(seq)) * [0] for seq in self.sequences
+        ]
 
         # Pad all offset lists on the rights with zeros. This needs masking later because zero is
         # also a valid offset.

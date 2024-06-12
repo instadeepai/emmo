@@ -277,9 +277,9 @@ def deconvolute_for_cleavage_mhc2(
     else:
         sequence_manager = SequenceManager.load_from_txt(input_file)
 
-    if sequence_manager.get_minimal_length() < motif_length:
+    if sequence_manager.min_length < motif_length:
         raise ValueError(
-            f"minimal sequence length {sequence_manager.get_minimal_length()} is smaller than "
+            f"minimal sequence length {sequence_manager.min_length} is smaller than "
             f"motif length {motif_length}"
         )
 
