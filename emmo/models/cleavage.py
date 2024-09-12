@@ -11,7 +11,8 @@ from emmo.io.file import Openable
 from emmo.io.file import save_csv
 from emmo.io.file import save_json
 from emmo.io.output import write_matrices
-from emmo.resources.background_freqs import get_background
+from emmo.pipeline.background import Background
+from emmo.pipeline.background import BackgroundType
 from emmo.utils.exceptions import NotFittedError
 
 
@@ -26,10 +27,10 @@ class CleavageModel:
         self,
         alphabet: str | tuple[str, ...] | list[str],
         number_of_classes: int,
+        background: BackgroundType,
         n_terminus_length: int = 3,
         c_terminus_length: int = 3,
         has_flat_motif: bool = True,
-        background: str = "MHC2_biondeep",
     ) -> None:
         """Initialize the cleavage model.
 
@@ -37,15 +38,17 @@ class CleavageModel:
             alphabet: The (amino acid) alphabet.
             number_of_classes: Number of motifs/classes (excl. the flat motif). Must be the same
                 for N- and C-terminus.
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
             n_terminus_length: The length of the motif for the N-terminus.
             c_terminus_length: The length of the motif for the C-terminus.
             has_flat_motif: Whether to include flat motifs.
-            background: The background amino acid frequencies. Must be a string corresponding to
-                one of the available backgrounds.
         """
         self.alphabet = alphabet
         self.n_alphabet = len(alphabet)
         self.alphabet_index = {a: i for i, a in enumerate(alphabet)}
+
+        self.background = Background(background)
 
         self.n_terminus_length = n_terminus_length
         self.c_terminus_length = c_terminus_length
@@ -55,12 +58,29 @@ class CleavageModel:
 
         self.has_flat_motif = has_flat_motif
 
-        self.background = background
-        self.background_freqs = get_background(background)
-
         self.is_fitted = False
 
         self._initialize_arrays()
+
+    @property
+    def num_of_parameters(self) -> int:
+        """Number of model parameters (frequencies and class priors).
+
+        Returns:
+            The number of model parameters.
+        """
+        # class weight incl. flat motif (subtract 1 because weights sum to one, times 2 for N- and
+        # C-terminus)
+        count = 2 * (self.n_classes - 1)
+
+        # frequencies summed over all other classes (subtract 1 because aa frequencies sum to one)
+        count += (
+            self.number_of_classes
+            * (self.n_terminus_length + self.c_terminus_length)
+            * (self.n_alphabet - 1)
+        )
+
+        return count
 
     @classmethod
     def load(cls, directory: Openable) -> CleavageModel:
@@ -79,10 +99,10 @@ class CleavageModel:
         model = cls(
             model_specs["alphabet"],
             model_specs["number_of_classes"],
+            model_specs["background"],
             n_terminus_length=model_specs["n_terminus_length"],
             c_terminus_length=model_specs["c_terminus_length"],
             has_flat_motif=model_specs["has_flat_motif"],
-            background=model_specs["background"],
         )
 
         n = model_specs["number_of_classes"]
@@ -153,10 +173,10 @@ class CleavageModel:
         model = cls(
             model_specs_n["alphabet"],
             model_specs_n["number_of_classes"],
+            model_specs_n["background"],
             n_terminus_length=model_specs_n["motif_length"],
             c_terminus_length=model_specs_c["motif_length"],
             has_flat_motif=model_specs_n["has_flat_motif"],
-            background=model_specs_n["background"],
         )
 
         n = model.number_of_classes
@@ -222,9 +242,9 @@ class CleavageModel:
                 "n_terminus_length",
                 "c_terminus_length",
                 "has_flat_motif",
-                "background",
             ]
         }
+        model_specs["background"] = self.background.get_representation()
 
         save_json(model_specs, directory / "model_specs.json", force=force)
 
@@ -278,27 +298,8 @@ class CleavageModel:
 
     def recompute_pssm(self) -> None:
         """Update the PSSMs using the current PPMs and the background."""
-        self.pssm_n[:] = self.ppm_n / self.background_freqs
-        self.pssm_c[:] = self.ppm_c / self.background_freqs
-
-    def get_number_of_parameters(self) -> int:
-        """Return the number of parameters (frequencies and class priors).
-
-        Returns:
-            The number of parameters.
-        """
-        # class weight incl. flat motif (subtract 1 because weights sum to one, times 2 for N- and
-        # C-terminus)
-        count = 2 * (self.n_classes - 1)
-
-        # frequencies summed over all other classes (subtract 1 because aa frequencies sum to one)
-        count += (
-            self.number_of_classes
-            * (self.n_terminus_length + self.c_terminus_length)
-            * (self.n_alphabet - 1)
-        )
-
-        return count
+        self.pssm_n[:] = self.ppm_n / self.background.frequencies
+        self.pssm_c[:] = self.ppm_c / self.background.frequencies
 
     def score_peptide(self, peptide: str, include_flat: bool = True) -> float:
         """Score a peptide with this model.

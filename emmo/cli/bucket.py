@@ -9,7 +9,7 @@ from cloudpathlib import CloudPath
 from emmo.bucket.model_puller import get_model_puller
 from emmo.bucket.model_pusher import get_model_pusher
 from emmo.constants import AVAILABLE_MODEL_DIRECTORIES
-from emmo.utils.click import abort_if_not_exists
+from emmo.utils.click import callback
 
 
 @click.command()
@@ -18,7 +18,7 @@ from emmo.utils.click import abort_if_not_exists
     "-n",
     required=True,
     type=CloudPath,
-    callback=abort_if_not_exists,
+    callback=callback.abort_if_not_exists,
     help=(
         "Folder of the model to pull. You must provide the full URI (e.g. "
         "gs://biondeep-models/emmo/binding_predictor/my_model)"
@@ -49,10 +49,7 @@ def pull_model(
     "-n",
     type=str,
     required=True,
-    help=(
-        "Model to use: it can be the name of the folder where the model is saved, i.e. "
-        "(experiment_name + date) or the path."
-    ),
+    help=("Model to use: it can be the name of the folder where the model is saved or the path."),
 )
 @click.option(
     "--force",

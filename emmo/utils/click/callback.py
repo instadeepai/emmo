@@ -1,4 +1,4 @@
-"""Utils related to click."""
+"""Define callbacks for click arguments."""
 from __future__ import annotations
 
 from pathlib import Path

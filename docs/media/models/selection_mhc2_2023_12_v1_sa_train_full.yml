@@ -1,0 +1,45 @@
+DPA10103-DPB10202:
+  keep: true
+  classes: 2
+  motif: 1
+DPA10103-DPB10301:
+  keep: true
+  classes: 2
+  motif: 1
+DPA10202-DPB10201:
+  keep: true
+  classes: 2
+  motif: 1
+DPA10202-DPB10202:
+  keep: true
+  classes: 2
+  motif: 1
+DPA10202-DPB10501:
+  keep: true
+  classes: 2
+  motif: 1
+DQA10102-DQB10502:
+  keep: true
+  classes: 2
+  motif: 2
+DQA10102-DQB10604:
+  keep: true
+  classes: 2
+  motif: 1
+DQA10301-DQB10401:
+  keep: true
+  classes: 1
+  motif: 1
+  comment: "motif possibly shifted by 2 towards N-terminus"
+DQA10401-DQB10402:
+  keep: true
+  classes: 2
+  motif: 2
+DRA0101-DRB10901:
+  keep: true
+  classes: 2
+  motif: 2
+DRA0101-DRB11502:
+  keep: true
+  classes: 3
+  motif: 1

@@ -1,11 +1,11 @@
 """Tensorflow implementation of the EM algorithm for MHC2 ligands."""
 from __future__ import annotations
 
-import numpy as np
 import tensorflow as tf
 
 from emmo.em.mhc2_base import BaseEMRunnerMHC2
-from emmo.io.sequences import SequenceManager
+from emmo.pipeline.background import BackgroundType
+from emmo.pipeline.sequences import SequenceManager
 
 
 @tf.function
@@ -370,7 +370,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
         sequence_manager: SequenceManager,
         motif_length: int,
         number_of_classes: int,
-        background: str = "MHC2_biondeep",
+        background: BackgroundType,
         tf_precision: str = "float64",
     ) -> None:
         """Initialize the MHC2 EM runner (tensorflow version).
@@ -380,8 +380,8 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             motif_length: The length of the motif(s) to be estimated.
             number_of_classes: The number of motifs/classes to be identified (not counting the flat
                 motif).
-            background: The background amino acid frequencies. Must be a string corresponding to
-                one of the available backgrounds.
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
             tf_precision: Float precision to be used for the tensorflow-based operations.
 
         Raises:
@@ -391,7 +391,7 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             sequence_manager,
             motif_length,
             number_of_classes,
-            background=background,
+            background,
         )
 
         if tf_precision == "float64":
@@ -403,8 +403,8 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
 
         # Broadcast background frequencies version for concatenation.
         self.background_freqs_broadcast = tf.broadcast_to(
-            tf.constant(self.background_freqs, dtype=self.tf_precision),
-            shape=(1, self.motif_length, self.background_freqs.shape[0]),
+            tf.constant(self.background.frequencies, dtype=self.tf_precision),
+            shape=(1, self.motif_length, self.background.frequencies.shape[0]),
         )
 
         # Convert similarity and offset weights to tf.Tensor
@@ -416,11 +416,11 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
 
     def _compute_padding(self) -> None:
         """Initialize the padding for sequences and offsets, and the corresponding masks."""
-        max_seq_len = self.sm.get_maximal_length()
-
         # Pad all sequences on the rights with zeros. This needs masking later because zero is also
         # a valid amino acid.
-        self.padded_sequences = [seq + (max_seq_len + len(seq)) * [0] for seq in self.sequences]
+        self.padded_sequences = [
+            seq + (self.sm.max_length + len(seq)) * [0] for seq in self.sequences
+        ]
 
         # Pad all offset lists on the rights with zeros. This needs masking later because zero is
         # also a valid offset.
@@ -481,14 +481,17 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             dtype=tf.int32,
         )
 
-    def _expectation_maximization(
-        self,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, np.ndarray, int]:
+    def _expectation_maximization(self) -> None:
         """Do one expectation-maximization run.
 
-        Returns:
-            The class weights, PPM, PSSM, log likelihood (using PSSM), log likelihood (using PPM),
-            responsibilities, and EM steps.
+        Does one EM run until convergence and sets at least the following attributes:
+        - self.current_class_weights
+        - self.current_ppm
+        - self.current_score
+        - self.current_responsibilities
+        - self.current_steps
+        - self.current_pssm
+        - self.current_log_likelihood_ppm
         """
         (
             class_weights,
@@ -511,39 +514,11 @@ class EMRunnerMHC2(BaseEMRunnerMHC2):
             self.offset_upweighting,
         )
 
-        return (
-            class_weights.numpy(),
-            ppm.numpy(),
-            pssm.numpy(),
-            float(ll_pssm.numpy()),
-            float(ll_ppm.numpy()),
-            responsibilities.numpy(),
-            int(steps.numpy()),
-        )
+        self.current_class_weights = class_weights.numpy()
+        self.current_ppm = ppm.numpy()
+        self.current_score = float(ll_pssm.numpy())
+        self.current_responsibilities = responsibilities.numpy()
+        self.current_steps = int(steps.numpy())
 
-
-if __name__ == "__main__":
-    import argparse
-
-    from emmo.constants import REPO_DIRECTORY
-
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("-n", "--no-gpu", action="store_true", help="disable GPU usage")
-    args = arg_parser.parse_args()
-
-    if args.no_gpu:
-        print("Disabling GPU ...")
-        tf.config.set_visible_devices([], "GPU")
-        visible_devices = tf.config.get_visible_devices()
-        for device in visible_devices:
-            if device.device_type == "GPU":
-                raise RuntimeError("GPU usage could not be disabled")
-
-    input_name = "HLA-A0101_A0218_background_class_II"
-    directory = REPO_DIRECTORY / "validation" / "local"
-    file = directory / f"{input_name}.txt"
-    output_directory = directory / input_name
-
-    sm = SequenceManager(file)
-    em_runner = EMRunnerMHC2(sm, 9, 2, tf_precision="float64")
-    em_runner.run(output_directory, output_all_runs=True, force=True)
+        self.current_pssm = pssm.numpy()
+        self.current_log_likelihood_ppm = float(ll_ppm.numpy())

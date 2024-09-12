@@ -10,9 +10,10 @@ from cloudpathlib import AnyPath
 
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
-from emmo.io.sequences import SequenceManager
 from emmo.models.deconvolution import DeconvolutionModelMHC2NoOffsetWeights
-from emmo.resources.background_freqs import get_background
+from emmo.pipeline.background import Background
+from emmo.pipeline.background import BackgroundType
+from emmo.pipeline.sequences import SequenceManager
 from emmo.utils.statistics import compute_aic
 
 
@@ -168,7 +169,11 @@ class VariableLengthEM:
     """Class for processing all different length."""
 
     def __init__(
-        self, sequence_manager: SequenceManager, motif_length: int, number_of_classes: int
+        self,
+        sequence_manager: SequenceManager,
+        motif_length: int,
+        number_of_classes: int,
+        background: BackgroundType,
     ) -> None:
         """Initialize the VariableLengthEM class.
 
@@ -177,6 +182,8 @@ class VariableLengthEM:
             motif_length: The length of the motif(s) to be estimated.
             number_of_classes: The number of motifs/classes to be identified (not counting the flat
                 motif).
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
         """
         self.sm = sequence_manager
 
@@ -188,7 +195,7 @@ class VariableLengthEM:
 
         self.motif_length = motif_length
 
-        self.background_freqs = get_background(which="MHC2_biondeep")
+        self.background = Background(background)
 
         self._compute_similarity_weights()
 
@@ -252,10 +259,10 @@ class VariableLengthEM:
             self._initialize_new_model()
 
             self.runners = {}
-            for length in self.sm.get_size_sorted_arrays().keys():
+            for length in self.sm.size_sorted_arrays.keys():
                 self.runners[length] = _EqualLengthHandler(
                     self.model,
-                    self.sm.get_size_sorted_arrays()[length],
+                    self.sm.size_sorted_arrays[length],
                     self.similarity_weights[length],
                 )
                 self.runners[length]._initialize(self.rng)
@@ -288,14 +295,14 @@ class VariableLengthEM:
             self.model.is_fitted = True
 
             log_likelihood = self._log_likelihood()
-            aic = compute_aic(self.model.get_number_of_parameters(), log_likelihood)
+            aic = compute_aic(self.model.num_of_parameters, log_likelihood)
 
             elapsed_time = perf_counter() - start_time
             print(
                 f"Estimating frequencies (run {run:2}), "
                 f"{steps:4} EM steps, "
                 f"score = {score} ... "
-                f"finished {self.sm.number_of_sequences()} "
+                f"finished {self.sm.number_of_sequences} "
                 f"sequences in {elapsed_time:.4f} seconds."
             )
 
@@ -385,14 +392,14 @@ class VariableLengthEM:
         self._initialize_new_model()
 
         self.runners = {}
-        for length in self.sm.get_size_sorted_arrays().keys():
+        for length in self.sm.size_sorted_arrays.keys():
             self.runners[length] = _EqualLengthHandler(
                 self.model,
-                self.sm.get_size_sorted_arrays()[length],
+                self.sm.size_sorted_arrays[length],
                 self.similarity_weights[length],
             )
             self.runners[length]._initialize_with_known_classes(
-                self.sm.get_size_sorted_classes()[length], class_mapping
+                self.sm.size_sorted_classes[length], class_mapping
             )
 
         # initialize PPMs and class weight based on initial responsibilities
@@ -423,13 +430,13 @@ class VariableLengthEM:
         self.model.is_fitted = True
 
         log_likelihood = self._log_likelihood()
-        aic = compute_aic(self.model.get_number_of_parameters(), log_likelihood)
+        aic = compute_aic(self.model.num_of_parameters, log_likelihood)
 
         elapsed_time = perf_counter() - start_time
         print(
             f"Estimating frequencies (single run with known classes), "
             f"{steps:4} EM steps, "
-            f" score = {score} ... finished {self.sm.number_of_sequences()}"
+            f" score = {score} ... finished {self.sm.number_of_sequences}"
             f" sequences in {elapsed_time:.4f} seconds."
         )
 
@@ -454,21 +461,21 @@ class VariableLengthEM:
             self.sm.alphabet,
             self.motif_length,
             self.number_of_classes,
+            self.background,
             has_flat_motif=True,
-            background="MHC2_biondeep",
         )
 
         # position probability matrices
         self.ppm = self.model.ppm
 
         # the last class is the flat motif which remains unchanged
-        self.ppm[self.number_of_classes] = self.background_freqs
+        self.ppm[self.number_of_classes] = self.background.frequencies
 
         # in the expectation step and for the log likehood, we do not use the raw frequencies but
         # divide them by the background frequencies, we pre-compute these "scores" after the
         # maximization step to save time
         self.pssm = self.model.pssm
-        self.pssm[:] = self.ppm / self.background_freqs
+        self.pssm[:] = self.ppm / self.background.frequencies
 
         # probalitities of the classes
         self.class_weights = self.model.class_weights
@@ -521,7 +528,7 @@ class VariableLengthEM:
         )
 
         self.pssm[: self.number_of_classes] = (
-            self.ppm[: self.number_of_classes] / self.background_freqs
+            self.ppm[: self.number_of_classes] / self.background.frequencies
         )
 
         # normalize so that class weights sum to one
@@ -623,16 +630,3 @@ class VariableLengthEM:
             "time": self.time_per_run,
         }
         save_csv(pd.DataFrame(d), directory / "runs.csv", force=force)
-
-
-if __name__ == "__main__":
-    from emmo.constants import REPO_DIRECTORY
-
-    input_name = "HLA-A0101_A0218_background_class_II"
-    directory = REPO_DIRECTORY / "validation" / "local"
-    file = directory / f"{input_name}.txt"
-    output_directory = directory / input_name
-
-    sm = SequenceManager(file)
-    em_runner = VariableLengthEM(sm, 9, 2)
-    em_runner.run(output_directory, output_all_runs=True, force=True)

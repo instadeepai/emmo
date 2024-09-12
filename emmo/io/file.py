@@ -448,7 +448,7 @@ def _save_file(
 
     if not force and file_path_.exists():
         raise FileExistsError(
-            f"The file {file_path} already exist, set force=True if you want to override it."
+            f"The file {file_path} already exist, set force=True if you want to overwrite it."
         )
 
     file_path_.parent.mkdir(exist_ok=True, parents=True)

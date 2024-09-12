@@ -8,7 +8,7 @@ import numpy as np
 from emmo.constants import AA2IDX
 from emmo.resources.allele2netmhc_pseudo_seq import sequences_mhc1
 from emmo.resources.allele2netmhc_pseudo_seq import sequences_mhc2
-from emmo.resources.substitution_matrix import blosum62_matrix
+from emmo.resources.substitution_matrix import BLOSUM62_MATRIX
 
 
 def _mhc2_pseudosequence(allele: str) -> str:
@@ -111,7 +111,7 @@ def get_blosum62_distance(
         # no gap
         if a != "-" and b != "-":
             # matrix is symmetric, so order does not matter
-            score += blosum62_matrix[AA2IDX[a], AA2IDX[b]]
+            score += BLOSUM62_MATRIX[AA2IDX[a], AA2IDX[b]]
             gap_opened1, gap_opened2 = False, False
 
         # only sequence 1 has gap

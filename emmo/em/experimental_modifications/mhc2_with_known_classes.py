@@ -9,7 +9,11 @@ import numpy as np
 
 from emmo.em.mhc2 import EMRunnerMHC2
 from emmo.io.file import Openable
-from emmo.io.sequences import SequenceManager
+from emmo.pipeline.background import BackgroundType
+from emmo.pipeline.sequences import SequenceManager
+from emmo.utils import logger
+
+log = logger.get(__name__)
 
 
 class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
@@ -20,7 +24,7 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
         sequence_manager: SequenceManager,
         motif_length: int,
         number_of_classes: int,
-        background: str = "MHC2_biondeep",
+        background: BackgroundType,
     ) -> None:
         """Initialize the MHC2 EM runner base class with given class initialization.
 
@@ -31,8 +35,8 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
             motif_length: The length of the motif(s) to be estimated.
             number_of_classes: The number of motifs/classes to be identified (not counting the flat
                 motif).
-            background: The background amino acid frequencies. Must be a string corresponding to
-                one of the available backgrounds.
+            background: The background amino acid frequencies. Can also be a string corresponding
+                to one of the available backgrounds.
 
         Raises:
             ValueError: If the minimal sequence length is shorter than the specified motif length.
@@ -42,7 +46,7 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
             sequence_manager,
             motif_length,
             number_of_classes,
-            background=background,
+            background,
         )
 
         if self.sm.classes is None:
@@ -51,20 +55,22 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
 
         self.class_mapping = self._map_classes_to_indices()
 
-    def _initialize_responsibilities(self) -> None:
+    def _initialize_responsibilities(self) -> np.ndarray:
         """Initialize the responsibilities with known classes.
 
         Returns:
             The initialized responsibilities.
         """
-        self.responsibilities = np.zeros((self.n_sequences, self.n_classes, self.n_offsets))
+        _responsibilities = np.zeros((self.n_sequences, self.n_classes, self.n_offsets))
 
         for s in range(self.n_sequences):
             c = self.class_mapping[self.classes[s]]
-            self.responsibilities[s, c, :] = 1
+            _responsibilities[s, c, :] = 1
 
         # normalize the initial responsibilities
-        self.responsibilities /= np.sum(self.responsibilities, axis=(1, 2), keepdims=True)
+        _responsibilities /= np.sum(_responsibilities, axis=(1, 2), keepdims=True)
+
+        return _responsibilities
 
     def _map_classes_to_indices(self) -> dict[str, int]:
         """Map the class names to indices.
@@ -130,11 +136,7 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
         output_all_runs = False
         n_runs = 1
 
-        print(
-            f"--------------------------------------------------------------\n"
-            f"Running EM algorithm with {self.number_of_classes} classes\n"
-            f"with given class initialization --> just doing 1 EM run\n"
-        )
+        log.info("Running EM algorithm with given class initialization, just doing 1 EM run")
 
         super().run(
             output_directory,

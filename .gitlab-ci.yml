@@ -2,6 +2,7 @@ stages:
   - build
   - tests
   - code-quality
+  - deploy
 
 variables:
   DOCKER_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
@@ -13,6 +14,14 @@ variables:
   DOCKER_IMAGE_PREVIOUS_LINT: $DOCKER_IMAGE_NAME_LINT:$CI_COMMIT_BEFORE_SHA
   DOCKER_IMAGE_LATEST_LINT: $DOCKER_IMAGE_NAME_LINT:latest
 
+  DOCKER_IMAGE_NAME_DOCS: $CI_REGISTRY_IMAGE/docs
+  DOCKER_IMAGE_DOCS: $DOCKER_IMAGE_NAME_DOCS:$CI_COMMIT_SHA
+  DOCKER_IMAGE_PREVIOUS_DOCS: $DOCKER_IMAGE_NAME_DOCS:$CI_COMMIT_BEFORE_SHA
+  DOCKER_IMAGE_LATEST_DOCS: $DOCKER_IMAGE_NAME_DOCS:latest
+
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+
 .docker-login:
   image: eu.gcr.io/int-infra-harborbackup-gcp/docker-hub/docker:19.03
   services:
@@ -20,6 +29,10 @@ variables:
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin
       "$CI_REGISTRY"
+
+.docs:
+  image: $DOCKER_IMAGE_DOCS
+  script: mkdocs build --verbose
 
 build:
   extends: .docker-login
@@ -38,6 +51,15 @@ build-lint:
     - docker build --cache-from $DOCKER_IMAGE_PREVIOUS_LINT --cache-from $DOCKER_IMAGE_LATEST_LINT
       -t $DOCKER_IMAGE_LINT . -f Dockerfile.lint
     - docker push $DOCKER_IMAGE_LINT
+
+build-docs:
+  extends: .docker-login
+  stage: build
+  script:
+    - docker pull $DOCKER_IMAGE_PREVIOUS_DOCS || docker pull $DOCKER_IMAGE_LATEST_DOCS || true
+    - docker build --cache-from $DOCKER_IMAGE_PREVIOUS_DOCS --cache-from $DOCKER_IMAGE_LATEST_DOCS
+      -t $DOCKER_IMAGE_DOCS . -f Dockerfile.docs
+    - docker push $DOCKER_IMAGE_DOCS
 
 lint:
   image: $DOCKER_IMAGE_LINT
@@ -67,3 +89,48 @@ pytest:
       coverage_report:
         coverage_format: cobertura
         path: coverage.xml
+
+page-test:
+  extends: .docs
+  stage: tests
+  needs: [build-docs]
+
+pages:
+  extends: .docs
+  stage: deploy
+  artifacts:
+    paths:
+      - public
+  only:
+    # for other branches, please visualize the docs locally (e.g. using 'mkdocs serve')
+    - main
+
+push-latest:
+  extends: .docker-login
+  stage: deploy
+  script:
+    - docker pull $DOCKER_IMAGE
+    - docker tag $DOCKER_IMAGE $DOCKER_IMAGE_LATEST
+    - docker push $DOCKER_IMAGE_LATEST
+  only:
+    - main
+
+push-latest-lint:
+  extends: .docker-login
+  stage: deploy
+  script:
+    - docker pull $DOCKER_IMAGE_LINT
+    - docker tag $DOCKER_IMAGE_LINT $DOCKER_IMAGE_LATEST_LINT
+    - docker push $DOCKER_IMAGE_LATEST_LINT
+  only:
+    - main
+
+push-latest-docs:
+  extends: .docker-login
+  stage: deploy
+  script:
+    - docker pull $DOCKER_IMAGE_DOCS
+    - docker tag $DOCKER_IMAGE_DOCS $DOCKER_IMAGE_LATEST_DOCS
+    - docker push $DOCKER_IMAGE_LATEST_DOCS
+  only:
+    - main

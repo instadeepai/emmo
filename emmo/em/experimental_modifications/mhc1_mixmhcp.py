@@ -14,8 +14,8 @@ import numpy as np
 from emmo.io.file import Openable
 from emmo.io.output import write_matrices
 from emmo.io.output import write_responsibilities
-from emmo.io.sequences import SequenceManager
-from emmo.resources.background_freqs import get_background
+from emmo.pipeline.background import Background
+from emmo.pipeline.sequences import SequenceManager
 
 
 PSEUDO_COUNT_PRIOR = 0.1
@@ -48,7 +48,7 @@ class EqualLengthEM:
         self.n_sequences = sequences.shape[0]
         self.n_motif = sequences.shape[1]
 
-        self.b = get_background(which="uniprot")
+        self.b = Background("uniprot").frequencies
 
     def run(self, n_runs: int = 5, random_seed: int = 0) -> None:
         """Run the expectation-maximization algorithm.
@@ -444,7 +444,7 @@ class FullEM:
         self.motif_length = motif_length
         self.N = number_of_classes
 
-        if self.motif_length not in self.sm.get_size_sorted_sequences():
+        if self.motif_length not in self.sm.size_sorted_sequences:
             raise ValueError(
                 f"no sequence with the specified motif length " f"{self.motif_length} found"
             )
@@ -462,7 +462,7 @@ class FullEM:
         )
 
         self.main_EM_runner = EqualLengthEM(
-            self.sm.get_size_sorted_arrays()[self.motif_length], len(self.sm.alphabet), self.N
+            self.sm.size_sorted_arrays[self.motif_length], len(self.sm.alphabet), self.N
         )
 
         self.main_EM_runner.run(random_seed=random_seed)
@@ -475,7 +475,7 @@ class FullEM:
             self.motif_length: self.main_EM_runner
         }
 
-        for length, seq_array in self.sm.get_size_sorted_arrays().items():
+        for length, seq_array in self.sm.size_sorted_arrays.items():
             if length == self.motif_length:
                 continue
 
@@ -519,19 +519,3 @@ class FullEM:
             self.N,
             force=force,
         )
-
-
-if __name__ == "__main__":
-    from emmo.constants import REPO_DIRECTORY
-
-    # input_name = 'HLA-A0101_A0218_background'
-    input_name = "HLA-A0101_A0218_background_various_lengths"
-    directory = REPO_DIRECTORY / "validation" / "local"
-    file = directory / f"{input_name}.txt"
-    output_directory = directory / input_name
-
-    sm = SequenceManager(file)
-    em_runner = FullEM(sm, 9, 2)
-    em_runner.run()
-
-    em_runner.write_results(output_directory, force=True)

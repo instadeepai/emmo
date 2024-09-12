@@ -1,0 +1,22 @@
+FROM python:3.10-slim as docs-image
+
+ARG HOME_DIRECTORY=/home/appuser/emmo
+
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PIPENV_VENV_IN_PROJECT=true PIP_NO_CACHE_DIR=false PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt update \
+    && apt install -y --no-install-recommends git \
+    && apt clean autoclean \
+    && apt autoremove -y \
+    && rm -rf /var/lib/{apt,dpkg,cache,log}
+
+COPY requirements-docs.txt /tmp/requirements-docs.txt
+
+RUN pip install --upgrade --quiet pip \
+    && pip install --no-cache-dir -r /tmp/requirements-docs.txt \
+    && rm -rf /tmp/*
+
+RUN git config --global --add safe.directory $HOME_DIRECTORY
+
+WORKDIR $HOME_DIRECTORY

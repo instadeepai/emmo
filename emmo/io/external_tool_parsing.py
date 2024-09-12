@@ -8,7 +8,7 @@ from emmo.constants import AA2IDX
 from emmo.constants import NATURAL_AAS
 from emmo.io.file import load_txt
 from emmo.io.file import Openable
-from emmo.resources.background_freqs import get_background
+from emmo.pipeline.background import Background
 
 
 def get_class_weight_from_responsibilities_modec(
@@ -107,7 +107,7 @@ def parse_pwms_modec(directory: Openable, number_of_motifs: int) -> np.ndarray:
     n = number_of_motifs
     pwms = np.zeros((n + 1, 9, 20), dtype=np.float64)
 
-    pwms[n] = get_background(which="uniprot")
+    pwms[n] = Background("uniprot").frequencies
 
     for i in range(n):
         pwms[i] = _parse_pwm_modec(directory / "PWMs" / f"PWM_K{n}_{i+1}.txt")
@@ -248,7 +248,7 @@ def parse_from_mhcmotifviewer(file_path: Openable, as_frequencies: bool = True) 
         # following is not ideal since we do not know how exactly the PWM was calculated for
         # MHCMotifViewer web service; however, we only want to obtain "some" frequency matrix that
         # we can work with
-        b = get_background(which="uniprot")
+        b = Background("uniprot").frequencies
         pwm = np.exp2(pwm) * b[:, np.newaxis]
         pwm /= np.sum(pwm, axis=0)
 

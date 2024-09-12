@@ -124,3 +124,66 @@ def _bucket_client_mock(
     finally:
         LocalS3Client.reset_default_storage_dir()
         LocalGSClient.reset_default_storage_dir()
+
+
+@pytest.fixture(scope="session")
+def example_sequences() -> list[str]:
+    """Test sequences."""
+    return [
+        "MADSRDPASD",
+        "QMQHWKEQRAAQ",
+        "KADVLT",
+        "TGAGNPVGDKLN",
+        "VITVGPRGPL",
+        "LVQDVVFTDEMA",
+        "HFDRERIP",
+        "ERVVHAKGAG",
+    ]
+
+
+@pytest.fixture(scope="session")
+def example_sequences_equal_length() -> list[str]:
+    """Test sequences of equal_length."""
+    return [
+        "MADSRDPASD",
+        "QMQHWKEQRA",
+        "AQKADVLTTG",
+        "AGNPVGDKLN",
+        "VITVGPRGPL",
+        "LVQDVVFTDE",
+        "MAHFDRERIP",
+        "ERVVHAKGAG",
+    ]
+
+
+@pytest.fixture(scope="module")
+def expected_amino_acid_counts() -> list[int]:
+    """Expected amino acid counts."""
+    return [9, 0, 8, 4, 2, 7, 3, 2, 4, 4, 3, 2, 5, 5, 6, 2, 4, 9, 1, 0]
+
+
+@pytest.fixture(scope="module")
+def expected_amino_acid_frequencies() -> list[float]:
+    """Expected amino acid frequencies."""
+    return [
+        0.1125,
+        0.0,
+        0.1,
+        0.05,
+        0.025,
+        0.0875,
+        0.0375,
+        0.025,
+        0.05,
+        0.05,
+        0.0375,
+        0.025,
+        0.0625,
+        0.0625,
+        0.075,
+        0.025,
+        0.05,
+        0.1125,
+        0.0125,
+        0.0,
+    ]
