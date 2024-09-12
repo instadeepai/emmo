@@ -11,6 +11,7 @@
 
 # To install emmo as a package
 !pyproject.toml
+!setup.py
 
 # Source code
 !emmo/

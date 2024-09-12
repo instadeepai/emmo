@@ -76,8 +76,10 @@ pytest:
   stage: tests
   needs: [build]
   script:
+    # rename to avoid importing from the source directory
+    - mv emmo emmo_source_code
     # --durations at the end of pytest, the 20 most time consuming tests will be printed
-    - pytest emmo tests --cov --durations=20 --doctest-modules
+    - pytest emmo_source_code tests --cov --durations=20 --doctest-modules
     # coverage visualization for gitlab
     # https://docs.gitlab.com/ee/user/project/merge_requests/test_coverage_visualization.html#python-example
     # https://gitlab.com/gitlab-org/gitlab/-/issues/285086#note_453723254

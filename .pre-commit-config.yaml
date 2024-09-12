@@ -4,6 +4,7 @@ default_language_version:
 
 default_stages: [commit]
 
+fail_fast: false
 repos:
   # Formatters
   - repo: https://github.com/psf/black
@@ -129,3 +130,14 @@ repos:
     rev: 0.6.1
     hooks:
       - id: nbstripout
+
+  # C/C++ formatters and linters
+  - repo: https://github.com/cpp-linter/cpp-linter-hooks
+    rev: v0.5.1
+    hooks:
+      - id: clang-format
+        args: [--style=Google]
+      # TODO: Find a solution to run clang-tidy in a way that the path to the Python header
+      # is dynamically set. This is necessary to avoid the error: 'Python.h' file not found.
+      # - id: clang-tidy
+      #   args: [--config, '{Checks: "-*,clang-analyzer-*"}']
