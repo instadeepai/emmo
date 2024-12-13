@@ -3,10 +3,16 @@ import numpy as np
 from setuptools import Extension
 from setuptools import setup
 
-extension_mod = Extension(
+extension_mhc1_deconv = Extension(
     "emmo.em.mhc1_c_ext",
     sources=["emmo/em/mhc1.c"],
     include_dirs=[np.get_include()],
 )
 
-setup(name="emmo", ext_modules=[extension_mod])
+extension_mhc2_deconv = Extension(
+    "emmo.em.mhc2_c_ext",
+    sources=["emmo/em/mhc2.c"],
+    include_dirs=[np.get_include()],
+)
+
+setup(name="emmo", ext_modules=[extension_mhc1_deconv, extension_mhc2_deconv])
