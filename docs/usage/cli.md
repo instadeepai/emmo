@@ -5,10 +5,10 @@ Currently, the following commands are available:
 | Command                                  | Description                                                                           |
 | ---------------------------------------- | ------------------------------------------------------------------------------------- |
 | _Deconvolution_                          |                                                                                       |
-| `deconvolute-mhc2`                       | Run the deconvolution for MHC2 ligands.                                               |
-| `deconvolute-per-allele-mhc2`            | Run the per-allele (alpha-beta pair) deconvolution for MHC2 ligands.                  |
+| `deconvolute`                            | Run the deconvolution for MHC ligands.                                                |
+| `deconvolute-per-group`                  | Run the per-group (e.g. per allele) deconvolution for MHC ligands.                    |
 | `deconvolute-for-cleavage-mhc2`          | Run the deconvolution for MHC2 cleavage models.                                       |
-| `plot-deconvolution-per-allele-mhc2`     | Plot per-allele (alpha-beta pair) deconvolution results for MHC2 ligands.             |
+| `plot-deconvolution-per-group`           | Plot per-group deconvolution results for MHC ligands.                                 |
 | _Prediction_                             |                                                                                       |
 | `predict-mhc2`                           | Run the prediction for MHC2 peptides and alleles.                                     |
 | `compile-predictor-mhc2`                 | Compile an MHC2 predictor from deconvolution results.                                 |

@@ -2,13 +2,49 @@
 from __future__ import annotations
 
 
+GENES_MHC1 = ("A", "B", "C", "E", "G")
 GENES_MHC2 = ("DR", "DP", "DQ")
+
+MIN_NAME_LENGTH_MHC1 = 5
+MAX_NAME_LENGTH_MHC1 = 6
 
 # TODO: decide whether this should be set e.g. to 7 (DRA0101)
 MIN_NAME_LENGTH_MHC2 = 3
 
 
-def parse_allele_pair(allele_pair: str) -> tuple[str, str]:
+def parse_mhc1_allele_pair(allele: str) -> str:
+    """Parse an MHC1 allele pair in short format.
+
+    The input must be a string in compact allele format.
+
+    Args:
+        allele: Allele.
+
+    Raises:
+        ValueError: If one of the alleles is too short or too long.
+        ValueError: If the gene is unknown (not one of A, B, C, E, or G).
+        ValueError: If the string could not be parsed.
+
+    Returns:
+        The input allele.
+    """
+    if len(allele) < MIN_NAME_LENGTH_MHC1:
+        raise ValueError(f"allele '{allele}' is too short")
+
+    if len(allele) > MAX_NAME_LENGTH_MHC1:
+        raise ValueError(f"allele '{allele}' is too long")
+
+    if allele[0] not in GENES_MHC1:
+        raise ValueError(f"unknown gene '{allele[0]}', must be in {GENES_MHC1}")
+
+    # check that the remaining characters are digits
+    if not allele[1:].isdigit():
+        raise ValueError(f"allele '{allele}' could not be parsed")
+
+    return allele
+
+
+def parse_mhc2_allele_pair(allele_pair: str) -> tuple[str, str]:
     """Parse an MHC2 allele pair.
 
     The input must be a string in which alpha and beta chain:

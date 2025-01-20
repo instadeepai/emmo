@@ -8,4 +8,3 @@ pytest
 pytest-cov
 python-dotenv
 pyyaml
-tensorflow==2.12

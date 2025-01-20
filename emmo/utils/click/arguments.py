@@ -45,8 +45,62 @@ def force(func: Callable = None, **kwargs: Any) -> Callable:
     return _outer_wrapper(func)
 
 
+def mhc_class(func: Callable = None, **kwargs: Any) -> Callable:
+    """Decorator used to define the mhc_class parameter.
+
+    The parameters 'help' and 'required' for this parameter can be overwritten.
+    """
+    kwargs["help"] = kwargs.get("help", "The MHC class for which to run the deconvolution.")
+    kwargs["required"] = kwargs.get("required", True)
+
+    def _outer_wrapper(func: Callable) -> Callable:
+        @click.option(
+            "--mhc_class",
+            "-c",
+            type=click.Choice(["1", "2"], case_sensitive=False),
+            **kwargs,
+        )
+        @functools.wraps(func)
+        def _inner_wrapper(*args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
+
+        return _inner_wrapper
+
+    if func is None:
+        return _outer_wrapper
+
+    return _outer_wrapper(func)
+
+
+def peptide_and_group_columns(func: Callable) -> Callable:
+    """Decorator to define the column name for peptides and groups in the input CSV file."""
+
+    @click.option(
+        "--peptide_column",
+        type=str,
+        required=False,
+        default="peptide",
+        help="The name of column in the CSV file containing the peptide.",
+    )
+    @click.option(
+        "--group_columns",
+        type=str,
+        required=False,
+        default=None,
+        help=(
+            "The name of column(s) in the CSV file for grouping the peptides. Multiple columns "
+            "can be specified by separating them with a comma."
+        ),
+    )
+    @functools.wraps(func)
+    def _wrapper(*args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    return _wrapper
+
+
 def peptide_and_allele_columns_mhc2(func: Callable) -> Callable:
-    """Decorator used to define the column name for peptides and alleles in the input CSV file."""
+    """Decorator to define the column name for peptides and MHC2 alleles in the input CSV file."""
 
     @click.option(
         "--peptide_column",
@@ -117,10 +171,10 @@ def deconvolution(func: Callable = None, **kwargs: Any) -> Callable:
             ),
         )
         @click.option(
-            "--disable_tf",
+            "--disable_c_extension",
             is_flag=True,
             help=(
-                "If this flag is added, the use of Tensorflow will be disabled and the Python "
+                "If this flag is added, the use of C extension will be disabled and the Python "
                 "version of the algorithm will be used instead."
             ),
         )

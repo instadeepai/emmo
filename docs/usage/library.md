@@ -6,7 +6,7 @@ The following code snippet is an example of how to use the MHC2 motif deconvolut
 
 ```python
 from emmo.pipeline.sequences import SequenceManager
-from emmo.em.mhc2_tf import EMRunnerMHC2   # omit the "_tf" for the non-tensorflow version
+from emmo.em.mhc2_c import EMRunnerMHC2   # omit the "_c" for the Python implementation
 
 INPUT_FILE = "peptides.txt"
 OUTPUT_DIR = "results"

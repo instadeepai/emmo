@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from emmo.utils.alleles import parse_allele_pair
+from emmo.utils.alleles import parse_mhc2_allele_pair
 
 
 @pytest.mark.parametrize(
@@ -21,14 +21,14 @@ from emmo.utils.alleles import parse_allele_pair
         ("DRB10102", ("DRA0101", "DRB10102")),
     ],
 )
-def test_parse_allele_pair(allele_pair: str, expected_return_value: tuple[str, str]) -> None:
-    """Test that 'parse_allele_pair' works as expected.
+def test_parse_mhc2_allele_pair(allele_pair: str, expected_return_value: tuple[str, str]) -> None:
+    """Test that 'parse_mhc2_allele_pair' works as expected.
 
     Args:
         allele_pair: Input string test.
         expected_return_value: Expected output of the function.
     """
-    assert parse_allele_pair(allele_pair) == expected_return_value
+    assert parse_mhc2_allele_pair(allele_pair) == expected_return_value
 
 
 @pytest.mark.parametrize(
@@ -47,14 +47,14 @@ def test_parse_allele_pair(allele_pair: str, expected_return_value: tuple[str, s
         ),
     ],
 )
-def test_parse_allele_pair_invalid_input(
+def test_parse_mhc2_allele_pair_invalid_input(
     allele_pair: str, expected_error_message: tuple[str, str]
 ) -> None:
-    """Ensure that 'parse_allele_pair' raises a ValueError for an invalid input.
+    """Ensure that 'parse_mhc2_allele_pair' raises a ValueError for an invalid input.
 
     Args:
         allele_pair: Input string test.
         expected_error_message: Expected error message match.
     """
     with pytest.raises(ValueError, match=expected_error_message):
-        parse_allele_pair(allele_pair)
+        parse_mhc2_allele_pair(allele_pair)
