@@ -9,6 +9,8 @@
 #include <numpy/arrayobject.h>
 #include <stdio.h>
 
+#include "utils.h"
+
 /* Define a struct to hold the data for the expectation maximization algorithm.
  *
  * Throughout the code, the following variables are used to iterate over the
@@ -464,20 +466,10 @@ static int compute_log_likelihood(EMStruct *em, double *p_log_likelihood,
 
   /* Add the log likelihood of the Dirichlet priors */
   double prior_log_likelihood = 0.0;
-  for (int c = 0; c < em->n_classes - 1; ++c) { /* Exclude flat motif */
-    int class_offset = c * em->motif_length * em->n_alphabet;
-    for (int p = 0; p < em->motif_length; ++p) {
-      int pos_offset = p * em->n_alphabet;
-      for (int a = 0; a < em->n_alphabet; ++a) {
-        double prob = em->ppm[class_offset + pos_offset + a];
-        if (prob <= 0.0) {
-          PyErr_SetString(PyExc_ValueError,
-                          "Logarithm of zero or negative number encountered.");
-          return -1;
-        }
-        prior_log_likelihood += log(prob);
-      }
-    }
+  if (compute_prior_log_likelihood(em->n_classes, em->motif_length,
+                                   em->n_alphabet, em->ppm,
+                                   &prior_log_likelihood, 1) == -1) {
+    return -1;
   }
   log_likelihood += em->pseudocount * prior_log_likelihood;
 
@@ -542,15 +534,8 @@ static int expectation(EMStruct *em) {
 /* Maximization step: update the PPM and class weights */
 static int maximization(EMStruct *em) {
   /* Set all values in ppm to pseudocount */
-  for (int c = 0; c < em->n_classes - 1; ++c) { /* Exclude flat motif */
-    int class_offset = c * em->motif_length * em->n_alphabet;
-    for (int p = 0; p < em->motif_length; ++p) {
-      int pos_offset = p * em->n_alphabet;
-      for (int a = 0; a < em->n_alphabet; ++a) {
-        em->ppm[class_offset + pos_offset + a] = em->pseudocount;
-      }
-    }
-  }
+  fill_ppm_with_value(em->n_classes, em->motif_length, em->n_alphabet, em->ppm,
+                      em->pseudocount, 1);
 
   /* Set all values in class_weights to 0 (pseudocount is added later) */
   for (int c = 0; c < em->n_classes; ++c) {
@@ -602,25 +587,9 @@ static int maximization(EMStruct *em) {
   }
 
   /* Normalize ppm so that frequencies sum to one for each position */
-  npy_double *pos_in_ppm = em->ppm;
-  for (int c = 0; c < em->n_classes - 1; ++c) { /* Exclude flat motif */
-    for (int p = 0; p < em->motif_length; ++p) {
-      npy_double resp_sum = 0.0;
-      for (int a = 0; a < em->n_alphabet; ++a) {
-        resp_sum += pos_in_ppm[a];
-      }
-      if (resp_sum == 0.0) {
-        PyErr_SetString(
-            PyExc_ZeroDivisionError,
-            "Division by zero encountered in PPM maximization step.");
-        return -1;
-      }
-      for (int a = 0; a < em->n_alphabet; ++a) {
-        pos_in_ppm[a] /= resp_sum;
-      }
-      /* Move the pointer*/
-      pos_in_ppm += em->n_alphabet;
-    }
+  if (normalize_ppm(em->n_classes, em->motif_length, em->n_alphabet, em->ppm,
+                    1) == -1) {
+    return -1;
   }
 
   /* Normalize class_weights so that frequencies sum to one */

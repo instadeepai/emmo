@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from emmo.em.c_extensions.mhc2_c_ext import run_em
 from emmo.em.mhc2_base import BaseEMRunnerMHC2
-from emmo.em.mhc2_c_ext import run_em
 from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
 
