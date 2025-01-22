@@ -5,8 +5,9 @@ ARG HOST_GID=1000
 
 ENV LANG=C.UTF-8
 
-RUN apt update && \
-    apt upgrade -y
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y build-essential
 
 ENV APP_FOLDER=/app USER=app PYTHONPATH=$APP_FOLDER:$PYTHONPATH
 
@@ -26,5 +27,5 @@ RUN pip install --upgrade --quiet pip && \
     rm -rf /tmp/*
 
 # Install the 'emmo' package
-COPY . .
-RUN pip install .
+COPY --chown=$USER . .
+RUN pip install . --verbose
