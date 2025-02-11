@@ -1,8 +1,11 @@
 """Module for functions to plot deconvolution results like motifs and length distributions."""
 from __future__ import annotations
 
+import concurrent.futures
+import math
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import logomaker as lm
 import matplotlib.pyplot as plt
@@ -11,11 +14,14 @@ import pandas as pd
 from cloudpathlib import AnyPath
 from cloudpathlib import CloudPath
 from matplotlib.axes._axes import Axes
+from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.figure import Figure
 
 from emmo.bucket.io import upload_to_directory
 from emmo.constants import NATURAL_AAS
 from emmo.io.file import Openable
 from emmo.models.cleavage import CleavageModel
+from emmo.models.deconvolution import DeconvolutionModel
 from emmo.models.deconvolution import DeconvolutionModelMHC1
 from emmo.models.deconvolution import DeconvolutionModelMHC2
 from emmo.models.prediction import PredictorMHC2
@@ -35,22 +41,33 @@ COLOR_ALT = "sienna"
 COLOR_ALT_LIGHT = "bisque"
 
 
-def save_plot(file_path: Openable) -> None:
+def save_plot(file_path: Openable, figures: list[Figure] | None = None) -> None:
     """Save the current plot locally or remotely and close it.
 
     Args:
         file_path: Local or remote path where to save the plot.
+        figures: List of Figure instances to save.
     """
     file_path = AnyPath(file_path)
 
     if isinstance(file_path, CloudPath):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_file = Path(tmp_dir) / file_path.name
-            plt.savefig(tmp_file)
+            if figures is not None:
+                with PdfPages(tmp_file) as pdf:
+                    for fig in figures:
+                        pdf.savefig(fig)
+            else:
+                plt.savefig(tmp_file)
             upload_to_directory(tmp_file, file_path.parent, force=True)
     else:
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(file_path)
+        if figures is not None:
+            with PdfPages(file_path) as pdf:
+                for fig in figures:
+                    pdf.savefig(fig)
+        else:
+            plt.savefig(file_path)
 
     log.info(f"Saved plot at {file_path}")
 
@@ -160,129 +177,111 @@ def plot_cleavage_model(model: CleavageModel, save_as: Openable | None = None) -
         plt.show()
 
 
-def plot_motifs_and_length_distribution_per_group_mhc1(
+def plot_motifs_and_length_distribution_per_group(
+    mhc_class: int,
     df_model_dirs: pd.DataFrame,
     output_directory: Openable,
     background: BackgroundType | None = None,
+    max_groups_per_page: int = 20,
+    number_of_processes: int = 1,
 ) -> None:
-    """Plot the motifs of the MHC1 deconvolution models and the length distributions.
+    """Plot the motifs of the MHC deconvolution models and the length distributions.
 
-    For each gene (A, B, C etc.; if existent) and each available number of classes, one plot is
-    created that contains the motifs for each class as well as the length distribution of the
-    peptides that where assigned to the respective motif during the deconvolution (maximum
-    responsibility).
+    For each gene (A, B, C, DR, DP, DQ etc.; if existent) and each available number of classes, one
+    plot is created that contains the motifs for each class as well as the length distribution of
+    the peptides that where assigned to the respective motif during the deconvolution (maximum
+    responsibility). If the groups cannot be parsed as alleles (or alpha/beta allele combination in
+    case of MHC2), the plots are only split by the number of classes. If there are more than
+    'max_groups_per_page' in a plot, the generated PDF will contain multiple pages.
 
     Args:
+        mhc_class: The MHC class.
         df_model_dirs: DataFrame containing the following columns:
-            - allele: Allele.
+            - group: Group; MHC1 allele; or MHC2 alpha and beta allele separated by a hyphen.
             - number_of_classes: Number of classes.
             - model_path: Path to the fitted deconvolution model.
         output_directory: Local or remote directory where to save the plots.
         background: Background frequencies to use. If None, the uniprot background is used.
+        max_groups_per_page: Maximum number of groups per page.
+        number_of_processes: Number of processes to use for parallelization.
     """
     output_directory = AnyPath(output_directory)
-    df_model_dirs = df_model_dirs.copy()
+    tasks = _plot_motifs_and_length_distribution_per_group_get_task(
+        mhc_class, df_model_dirs, background, max_groups_per_page
+    )
 
-    if background is None:
-        background = Background("uniprot")
-        log.info("Using uniprot background frequencies for plotting")
+    if number_of_processes > 1:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=number_of_processes) as executor:
+            futures = [
+                executor.submit(_plot_motifs_and_length_distribution_per_group_single_page, *task)
+                for task in tasks
+            ]
+            concurrent.futures.wait(futures)
+            figures = [future.result() for future in futures]
     else:
-        log.info("Using custom background frequencies for plotting")
+        figures = [
+            _plot_motifs_and_length_distribution_per_group_single_page(*task) for task in tasks
+        ]
 
-    try:
-        # if the allele is a valid MHC1 allele, extract the gene
-        df_model_dirs["gene"] = df_model_dirs["group"].apply(lambda x: parse_mhc1_allele_pair(x)[0])
-        log.info("Extracted gene from group column")
-    except ValueError:
-        # use the groups as they are, set gene to "MHC1" for all such that the plots are not split
-        df_model_dirs["gene"] = "MHC1"
-        log.info("Could not extract gene from group column, not splitting plots")
+    file_name2figures: dict[str, list[Figure]] = {}
+    for (_, _, gene, number_of_classes, _, _), fig in zip(tasks, figures):
+        file_name = f"{gene}_classes_{number_of_classes}.pdf"
 
-    for (gene, number_of_classes), df_gene in df_model_dirs.groupby(["gene", "number_of_classes"]):
-        log.info(
-            f"Plotting deconvolution results: {gene}, "
-            f"{number_of_classes} class{'es' if number_of_classes != 1 else ''}"
-        )
+        if file_name not in file_name2figures:
+            file_name2figures[file_name] = []
 
-        num_of_groups = len(df_gene)
+        file_name2figures[file_name].append(fig)
 
-        n_columns = 3 * number_of_classes + 2
-        _, axs = plt.subplots(num_of_groups, n_columns, figsize=(6 * n_columns, 4 * num_of_groups))
-
-        if num_of_groups == 1:
-            axs = axs[np.newaxis, :]
-
-        for i, (_, row) in enumerate(df_gene.iterrows()):
-            group = str(row.group)
-            log.info(f"Plotting {gene}, group {i+1}/{num_of_groups} ({group})")
-
-            model_path = AnyPath(row.model_path)
-            model = DeconvolutionModelMHC1.load(model_path)
-
-            if model.number_of_classes != number_of_classes:
-                raise ValueError(
-                    f"number of classes in model {row.model_path} does not match, should be "
-                    f"{number_of_classes}, got {model.number_of_classes}"
-                )
-
-            _plot_model_to_axes(model, group, axs[i, :-2:3], background)
-
-            _plot_mhc1_class_weights_to_axes(
-                model,
-                group,
-                list(axs[i, 1:-2:3]) + [axs[i, -2]],
-                include_flat=True,
-            )
-
-            responsibilities = pd.read_csv(model_path / "responsibilities.csv")
-            _plot_length_distribution_from_responsibilities(
-                model,
-                responsibilities,
-                group,
-                list(axs[i, 2:-2:3]) + [axs[i, -1]],
-                include_flat=True,
-            )
-
-        _unify_ylim(axs[:, :-2:3])
-        plt.tight_layout()
-
-        file_path = output_directory / f"{gene}_classes_{number_of_classes}.pdf"
-        save_plot(file_path)
+    if number_of_processes > 1:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=number_of_processes) as executor:
+            futures = [
+                executor.submit(save_plot, output_directory / file_name, figures)
+                for file_name, figures in file_name2figures.items()
+            ]
+            concurrent.futures.wait(futures)
+    else:
+        for file_name, figures in file_name2figures.items():
+            save_plot(output_directory / file_name, figures)
 
 
-def plot_motifs_and_length_distribution_per_group_mhc2(
+def _plot_motifs_and_length_distribution_per_group_get_task(
+    mhc_class: int,
     df_model_dirs: pd.DataFrame,
-    output_directory: Openable,
-) -> None:
-    """Plot the motifs of the MHC2 deconvolution models and the length distributions.
-
-    If the group column contains the alpha and beta chain alleles separated by a hyphen, then the
-    plots are split by in the following way: For each gene (DR, DP, and DQ; if existent) and each
-    available number of classes, one plot is created that contains the motifs for each class as
-    well as the length distribution of the peptides that where assigned to the respective motif
-    during the deconvolution (maximum responsibility). Otherwise, the plots are only split by the
-    number of classes.
+    background: BackgroundType | None,
+    max_groups_per_page: int,
+) -> list[tuple[Any, ...]]:
+    """Get the tasks for plotting the motifs and length distributions per group.
 
     Args:
+        mhc_class: The MHC class.
         df_model_dirs: DataFrame containing the following columns:
-            - group: Group; or alpha and beta chain allele separated by a hyphen.
+            - group: Group; MHC1 allele; or MHC2 alpha and beta allele separated by a hyphen.
             - number_of_classes: Number of classes.
             - model_path: Path to the fitted deconvolution model.
-        output_directory: Local or remote directory where to save the plots.
+        background: Background frequencies to use.
+        max_groups_per_page: Maximum number of groups per page.
+
+    Returns:
+        List of tasks.
     """
-    output_directory = AnyPath(output_directory)
     df_model_dirs = df_model_dirs.copy()
 
     try:
-        # try to parse alpha and beta chain alleles from the group column, and extract the gene
-        df_model_dirs["gene"] = df_model_dirs["group"].apply(
-            lambda x: parse_mhc2_allele_pair(x)[0][:2]
-        )
+        # if the allele is a valid MHC allele, extract the gene
+        if mhc_class == 1:
+            df_model_dirs["gene"] = df_model_dirs["group"].apply(
+                lambda x: parse_mhc1_allele_pair(x)[0]
+            )
+        else:
+            df_model_dirs["gene"] = df_model_dirs["group"].apply(
+                lambda x: parse_mhc2_allele_pair(x)[0][:2]
+            )
         log.info("Extracted gene from group column")
     except ValueError:
-        # use the groups as they are, set gene to "MHC2" for all such that the plots are not split
-        df_model_dirs["gene"] = "MHC2"
+        df_model_dirs["gene"] = f"MHC{mhc_class}"
         log.info("Could not extract gene from group column, not splitting plots")
+
+    tasks: list[tuple[Any, ...]] = []
 
     for (gene, number_of_classes), df_gene in df_model_dirs.groupby(["gene", "number_of_classes"]):
         log.info(
@@ -290,49 +289,102 @@ def plot_motifs_and_length_distribution_per_group_mhc2(
             f"{number_of_classes} class{'es' if number_of_classes != 1 else ''}"
         )
 
-        num_of_groups = len(df_gene)
+        num_pages = math.ceil(len(df_gene) / max_groups_per_page)
 
-        n_columns = 3 * number_of_classes + 2
-        _, axs = plt.subplots(num_of_groups, n_columns, figsize=(6 * n_columns, 4 * num_of_groups))
-
-        if num_of_groups == 1:
-            axs = axs[np.newaxis, :]
-
-        for i, (_, row) in enumerate(df_gene.iterrows()):
-            group = str(row.group)
-            log.info(f"Plotting {gene}, group {i+1}/{num_of_groups} ({group})")
-            model_path = AnyPath(row.model_path)
-            model = DeconvolutionModelMHC2.load(model_path)
-
-            if model.number_of_classes != number_of_classes:
-                raise ValueError(
-                    f"number of classes in model {row.model_path} does not match, should be "
-                    f"{number_of_classes}, got {model.number_of_classes}"
+        for page in range(num_pages):
+            df_gene_page = df_gene.iloc[
+                page * max_groups_per_page : (page + 1) * max_groups_per_page
+            ]
+            tasks.append(
+                (
+                    mhc_class,
+                    df_gene_page,
+                    gene,
+                    number_of_classes,
+                    page,
+                    background,
                 )
-
-            _plot_model_to_axes(model, group, axs[i, :-2:3])
-
-            _plot_mhc2_offset_weights_to_axes(
-                model,
-                group,
-                list(axs[i, 1:-2:3]) + [axs[i, -2]],
-                include_flat=True,
             )
 
-            responsibilities = pd.read_csv(model_path / "responsibilities.csv")
-            _plot_length_distribution_from_responsibilities(
-                model,
-                responsibilities,
-                group,
-                list(axs[i, 2:-2:3]) + [axs[i, -1]],
-                include_flat=True,
+    return tasks
+
+
+def _plot_motifs_and_length_distribution_per_group_single_page(
+    mhc_class: int,
+    df_: pd.DataFrame,
+    gene: str,
+    number_of_classes: int,
+    page: int,
+    background: BackgroundType | None = None,
+) -> Figure:
+    """Plot the motifs of the MHC deconvolution models and the length distributions.
+
+    Args:
+        mh_class: The MHC class.
+        df_: DataFrame containing the following columns:
+            - group: Group; MHC1 allele; or MHC2 alpha and beta allele separated by a hyphen.
+            - model_path: Path to the fitted deconvolution model.
+        gene: The gene.
+        number_of_classes: Number of classes.
+        page: The page number.
+        background: Background frequencies to use. If None, the uniprot background (MHC1) or the
+            background of the model (MHC2) is used.
+
+    Raises:
+        ValueError: If the number of classes in the model does not match the expected number of
+            classes.
+
+    Returns:
+        The Figure instance.
+    """
+    num_of_groups = len(df_)
+
+    n_columns = 3 * number_of_classes + 2
+    fig, axs = plt.subplots(num_of_groups, n_columns, figsize=(6 * n_columns, 4 * num_of_groups))
+
+    if num_of_groups == 1:
+        axs = axs[np.newaxis, :]
+
+    for i, (_, row) in enumerate(df_.iterrows()):
+        group = str(row.group)
+        log.info(f"Plotting gene {gene}, page {page}, group {i+1}/{num_of_groups} ({group})")
+
+        model_path = AnyPath(row.model_path)
+        model: DeconvolutionModel
+
+        if mhc_class == 1:
+            model = DeconvolutionModelMHC1.load(model_path)
+            if background is None:
+                background = Background("uniprot")
+                log.info(
+                    "No background frequencies provided for plotting MHC1 models; using default "
+                    "(uniprot)"
+                )
+        else:
+            model = DeconvolutionModelMHC2.load(model_path)
+            if background is None:
+                background = model.background
+
+        if model.number_of_classes != number_of_classes:
+            raise ValueError(
+                f"number of classes in model {row.model_path} does not match, should be "
+                f"{number_of_classes}, got {model.number_of_classes}"
             )
 
-        _unify_ylim(axs[:, :-2:3])
-        plt.tight_layout()
+        _plot_model_to_axes(model, group, axs[i, :-2:3], background)
+        _plot_class_weights_to_axes(model, group, list(axs[i, 1:-2:3]) + [axs[i, -2]])
+        _plot_length_distribution_from_responsibilities(
+            model,
+            pd.read_csv(model_path / "responsibilities.csv"),
+            group,
+            list(axs[i, 2:-2:3]) + [axs[i, -1]],
+            include_flat=True,
+        )
 
-        file_path = output_directory / f"{gene}_classes_{number_of_classes}.pdf"
-        save_plot(file_path)
+    _unify_ylim(axs[:, :-2:3])
+    fig.tight_layout()
+
+    return fig
 
 
 def plot_predictor_mhc2(predictor: PredictorMHC2, output_directory: Openable) -> None:
@@ -395,9 +447,7 @@ def _unify_ylim(axs: np.ndarray[Axes]) -> None:
         ax.set_ylim(min_ylim, max_ylim)
 
 
-def _get_weights_per_motif(
-    model: DeconvolutionModelMHC1 | DeconvolutionModelMHC2,
-) -> np.ndarray | None:
+def _get_weights_per_motif(model: DeconvolutionModel) -> np.ndarray | None:
     """Get the weights per motif.
 
     Args:
@@ -418,7 +468,7 @@ def _get_weights_per_motif(
 
 
 def _plot_model_to_axes(
-    model: DeconvolutionModelMHC1 | DeconvolutionModelMHC2,
+    model: DeconvolutionModel,
     title: str,
     axs: Axes | np.ndarray,
     background: BackgroundType | None = None,
@@ -455,6 +505,31 @@ def _plot_model_to_axes(
         if title:
             _title = f"{title}\n{_title}"
         ax.set_title(_title)
+
+
+def _plot_class_weights_to_axes(
+    model: DeconvolutionModel,
+    title: str,
+    axs: Axes | np.ndarray,
+    include_flat: bool = True,
+) -> None:
+    """Plot the class weights of an MHC deconvolution model using the given Axes instance(s).
+
+    Args:
+        model: The model.
+        title: The title for the plot.
+        axs: The Axes instance(s) used for plotting.
+        include_flat: Whether to include the flat motif.
+
+    Raises:
+        ValueError: If the model type is not supported.
+    """
+    if isinstance(model, DeconvolutionModelMHC1):
+        _plot_mhc1_class_weights_to_axes(model, title, axs, include_flat=include_flat)
+    elif isinstance(model, DeconvolutionModelMHC2):
+        _plot_mhc2_offset_weights_to_axes(model, title, axs, include_flat=include_flat)
+    else:
+        raise ValueError(f"unsupported model type: {type(model)}")
 
 
 def _plot_mhc1_class_weights_to_axes(
@@ -572,7 +647,7 @@ def _plot_mhc2_offset_weights_to_axes(
 
 
 def _plot_length_distribution_from_responsibilities(
-    model: DeconvolutionModelMHC1 | DeconvolutionModelMHC2,
+    model: DeconvolutionModel,
     responsibilities: pd.DataFrame,
     title: str,
     axs: Axes | np.ndarray[Axes] | list[Axes],
@@ -622,7 +697,11 @@ def _plot_length_distribution_from_responsibilities(
             color_partial_values=color_partial_values,
         )
 
-        _title = f"length distribution ({_title}, weight {class_weights[i]:.3f})"
+        if class_weights is not None:
+            _title = f"length distribution ({_title}, weight {class_weights[i]:.3f})"
+        else:
+            _title = f"length distribution ({_title})"
+
         if title:
             _title = f"{title}\n{_title}"
         ax.set_title(_title)

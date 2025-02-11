@@ -26,6 +26,10 @@ from emmo.utils.offsets import AlignedOffsets
 class DeconvolutionModel(ABC):
     """Abstract base class for deconvolution models."""
 
+    number_of_classes: int
+    alphabet: str | tuple[str, ...] | list[str]
+    ppm: np.ndarray
+
     @property
     @abstractmethod
     def num_of_parameters(self) -> int:

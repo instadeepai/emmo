@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 from cloudpathlib import AnyPath
 
+from emmo.constants import MHC2_ALPHA_COL
+from emmo.constants import MHC2_BETA_COL
 from emmo.io.file import load_csv
 from emmo.io.file import load_json
 from emmo.io.file import Openable
@@ -442,8 +444,8 @@ class PredictorMHC2:
         self,
         df: pd.DataFrame,
         peptide_column: str = "peptide",
-        allele_alpha_column: str = "allele_alpha",
-        allele_beta_column: str = "allele_beta",
+        allele_alpha_column: str = MHC2_ALPHA_COL,
+        allele_beta_column: str = MHC2_BETA_COL,
         column_prefix: str = "emmo",
         inplace: bool = False,
         score_length: bool = False,

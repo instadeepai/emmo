@@ -10,6 +10,8 @@ import pandas as pd
 from cloudpathlib import AnyPath
 from cloudpathlib import CloudPath
 
+from emmo.constants import MHC2_ALPHA_COL
+from emmo.constants import MHC2_BETA_COL
 from emmo.constants import MHC2_BINDING_CORE_SIZE
 from emmo.constants import MODELS_DIRECTORY
 from emmo.io.file import load_csv
@@ -550,8 +552,8 @@ def _score_with_deconvolution_models(
         this class), and whether the best class is equal to the motif for the deconvolution model.
     """
     peptide = row["peptide"]
-    allele_alpha = row["allele_alpha"]
-    allele_beta = row["allele_beta"]
+    allele_alpha = row[MHC2_ALPHA_COL]
+    allele_beta = row[MHC2_BETA_COL]
     allele = f"{allele_alpha}-{allele_beta}"
 
     if allele not in selected_models:

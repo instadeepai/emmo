@@ -57,6 +57,8 @@ and MHC2
 
 The command has the same required arguments as `deconvolute`. However, the output directory contains
 one folder per group which in turn contains the folders for the different numbers of classes.
+**Consider using the parameter `--number_of_processes` to parallelize the deconvolution of the
+groups.**
 
 By default, the background amino acid frequencies (used in the log likelihood function that is
 maximized) are obtained from the full list of peptides across all alleles.

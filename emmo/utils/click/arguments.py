@@ -18,6 +18,9 @@ from typing import Callable
 
 import click
 
+from emmo.constants import MHC2_ALPHA_COL
+from emmo.constants import MHC2_BETA_COL
+
 
 def force(func: Callable = None, **kwargs: Any) -> Callable:
     """Decorator used to define the force flag.
@@ -72,6 +75,24 @@ def mhc_class(func: Callable = None, **kwargs: Any) -> Callable:
     return _outer_wrapper(func)
 
 
+def number_of_processes(func: Callable = None) -> Callable:
+    """Decorator used to define the number of processes for parallelization."""
+
+    @click.option(
+        "--number_of_processes",
+        "-p",
+        type=int,
+        required=False,
+        default=1,
+        help="The number of processes to use for parallelization.",
+    )
+    @functools.wraps(func)
+    def _wrapper(*args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    return _wrapper
+
+
 def peptide_and_group_columns(func: Callable) -> Callable:
     """Decorator to define the column name for peptides and groups in the input CSV file."""
 
@@ -113,14 +134,14 @@ def peptide_and_allele_columns_mhc2(func: Callable) -> Callable:
         "--allele_alpha_column",
         type=str,
         required=False,
-        default="allele_alpha",
+        default=MHC2_ALPHA_COL,
         help="The name of column in the CSV file containing the alpha chain.",
     )
     @click.option(
         "--allele_beta_column",
         type=str,
         required=False,
-        default="allele_beta",
+        default=MHC2_BETA_COL,
         help="The name of column in the CSV file containing the beta chain.",
     )
     @functools.wraps(func)
@@ -210,3 +231,20 @@ def deconvolution(func: Callable = None, **kwargs: Any) -> Callable:
         return _outer_wrapper
 
     return _outer_wrapper(func)
+
+
+def max_groups_per_page(func: Callable = None) -> Callable:
+    """Decorator used to define the maximum number of groups to plot per PDF page."""
+
+    @click.option(
+        "--max_groups_per_page",
+        type=int,
+        required=False,
+        default=20,
+        help="Maximum number of groups to plot per PDF page.",
+    )
+    @functools.wraps(func)
+    def _wrapper(*args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    return _wrapper
