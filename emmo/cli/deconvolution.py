@@ -1,6 +1,7 @@
 """Command line tools for deconvolution."""
 from __future__ import annotations
 
+import concurrent.futures
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +10,16 @@ import pandas as pd
 from cloudpathlib import AnyPath
 from cloudpathlib import CloudPath
 
+from emmo.constants import MHC1_ALLELE_COL
+from emmo.constants import MHC2_ALPHA_COL
+from emmo.constants import MHC2_BETA_COL
+from emmo.em.mhc1 import EMRunnerMHC1 as EMRunnerMHC1_Python
+from emmo.em.mhc1_c import EMRunnerMHC1 as EMRunnerMHC1_C
+from emmo.em.mhc2 import EMRunnerMHC2 as EMRunnerMHC2_Python
+from emmo.em.mhc2_c import EMRunnerMHC2 as EMRunnerMHC2_C
 from emmo.io.file import load_csv
-from emmo.io.output import find_deconvolution_results_mhc2
+from emmo.io.output import check_valid_directory_name
+from emmo.io.output import find_deconvolution_results
 from emmo.models.cleavage import CleavageModel
 from emmo.pipeline.background import Background
 from emmo.pipeline.background import BackgroundType
@@ -19,12 +28,13 @@ from emmo.utils import logger
 from emmo.utils.click import arguments
 from emmo.utils.click import callback
 from emmo.utils.viz import plot_cleavage_model
-from emmo.utils.viz import plot_motifs_and_length_distribution_per_allele_mhc2
+from emmo.utils.viz import plot_motifs_and_length_distribution_per_group
 
 log = logger.get(__name__)
 
 
 @click.command()
+@arguments.mhc_class
 @click.option(
     "--input_file",
     "-i",
@@ -45,11 +55,12 @@ log = logger.get(__name__)
     "-b",
     type=str,
     required=False,
-    default="MHC2_biondeep",
-    help="The background frequencies to be used.",
+    default=None,
+    help="The background frequencies to be used (relevant for MHC2 only).",
 )
 @arguments.deconvolution
-def deconvolute_mhc2(
+def deconvolute(
+    mhc_class: str,
     input_file: Path | CloudPath,
     output_directory: Path | CloudPath,
     background_frequencies: str,
@@ -57,17 +68,18 @@ def deconvolute_mhc2(
     min_classes: int,
     max_classes: int,
     number_of_runs: int,
-    disable_tf: bool,
+    disable_c_extension: bool,
     output_all_runs: bool,
     skip_existing: bool,
     force: bool,
 ) -> None:
-    """Run the deconvolution for MHC2 ligands."""
+    """Run the deconvolution for a list of MHC ligands."""
     _check_output_directory(output_directory, force, skip_existing)
 
     sequence_manager = SequenceManager.load_from_txt(input_file)
 
-    _run_deconvolutions_mhc2(
+    _run_deconvolution(
+        mhc_class,
         sequence_manager,
         output_directory,
         background_frequencies,
@@ -75,13 +87,14 @@ def deconvolute_mhc2(
         min_classes,
         max_classes,
         number_of_runs,
-        disable_tf,
+        disable_c_extension,
         output_all_runs,
         skip_existing,
     )
 
 
 @click.command()
+@arguments.mhc_class
 @click.option(
     "--input_file",
     "-i",
@@ -103,38 +116,52 @@ def deconvolute_mhc2(
     type=str,
     required=False,
     default=None,
-    help="The background frequencies to be used.",
+    help="The background frequencies to be used (relevant for MHC2 only).",
 )
-@arguments.peptide_and_allele_columns_mhc2
+@arguments.peptide_and_group_columns
 @arguments.deconvolution
+@arguments.number_of_processes
 @click.option(
     "--plot",
     is_flag=True,
     help="If this flag is set, the deconvolution results are plotted in the subdirectory 'plots'.",
 )
+@arguments.max_groups_per_page
 @click.pass_context
-def deconvolute_per_allele_mhc2(
+def deconvolute_per_group(
     ctx: click.core.Context,
+    mhc_class: str,
     input_file: Path | CloudPath,
     output_directory: Path | CloudPath,
     existing_background_name: str | None,
     peptide_column: str,
-    allele_alpha_column: str,
-    allele_beta_column: str,
+    group_columns: str | None,
     motif_length: int,
     min_classes: int,
     max_classes: int,
     number_of_runs: int,
-    disable_tf: bool,
+    disable_c_extension: bool,
     output_all_runs: bool,
     force: bool,
     skip_existing: bool,
+    number_of_processes: int,
     plot: bool,
+    max_groups_per_page: int,
 ) -> None:
-    """Run the per-allele (alpha-beta pair) deconvolution for MHC2 ligands."""
-    _check_output_directory(output_directory, force, skip_existing)
+    """Run the per-group deconvolution for MHC ligands.
 
-    df = load_csv(input_file, usecols=[peptide_column, allele_alpha_column, allele_beta_column])
+    If the 'group_columns' argument is not provided, the deconvolution is run per allele. In this
+    case, a column 'allele' is expected in the input file for MHC1, and columns 'allele_alpha' and
+    'allele_beta' are expected for MHC2. If custom columns for the alpha and beta chains are
+    provided, these are assumed to be ordered such that the alpha chain comes first.
+    """
+    _check_output_directory(output_directory, force, skip_existing)
+    if group_columns is None:
+        group_columns = MHC1_ALLELE_COL if mhc_class == "1" else f"{MHC2_ALPHA_COL},{MHC2_BETA_COL}"
+
+    group_columns_list = group_columns.split(",")
+
+    df = load_csv(input_file, usecols=[peptide_column, *group_columns_list])
 
     background = _initialize_background(
         output_directory,
@@ -144,38 +171,53 @@ def deconvolute_per_allele_mhc2(
         skip_existing,
     )
 
-    for (allele_alpha, allele_beta), df_allele in df.groupby(
-        by=[allele_alpha_column, allele_beta_column]
-    ):
-        allele = f"{allele_alpha}-{allele_beta}"
-        sequence_manager = SequenceManager(df_allele[peptide_column].to_list())
-        output_directory_allele = output_directory / allele
+    tasks = []
 
-        log.info(f"Starting to process allele {allele} ...")
+    for group, df_group in df.groupby(by=group_columns_list):
+        group_name = "-".join(group)
+        check_valid_directory_name(group_name)
+        output_directory_group = output_directory / group_name
 
-        _run_deconvolutions_mhc2(
-            sequence_manager,
-            output_directory_allele,
-            background,
-            motif_length,
-            min_classes,
-            max_classes,
-            number_of_runs,
-            disable_tf,
-            output_all_runs,
-            skip_existing,
+        sequence_manager = SequenceManager(df_group[peptide_column].to_list())
+
+        tasks.append(
+            (
+                mhc_class,
+                sequence_manager,
+                output_directory_group,
+                background,
+                motif_length,
+                min_classes,
+                max_classes,
+                number_of_runs,
+                disable_c_extension,
+                output_all_runs,
+                skip_existing,
+            )
         )
+
+    if number_of_processes > 1:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=number_of_processes) as executor:
+            futures = [executor.submit(_run_deconvolution, *task) for task in tasks]
+            concurrent.futures.wait(futures)
+    else:
+        for task in tasks:
+            _run_deconvolution(*task)
 
     if plot:
         ctx.invoke(
-            plot_deconvolution_per_allele_mhc2,
+            plot_deconvolution_per_group,
+            mhc_class=mhc_class,
             input_directory=output_directory,
             output_directory=(output_directory / "plots"),
             force=True,
+            max_groups_per_page=max_groups_per_page,
+            number_of_processes=number_of_processes,
         )
 
 
 @click.command()
+@arguments.mhc_class
 @click.option(
     "--input_directory",
     "-i",
@@ -195,19 +237,42 @@ def deconvolute_per_allele_mhc2(
         "subdirectory 'plots' within the input directory."
     ),
 )
+@arguments.max_groups_per_page
 @arguments.force(help="Overwrite existing plots.")
-def plot_deconvolution_per_allele_mhc2(
+@arguments.number_of_processes
+def plot_deconvolution_per_group(
+    mhc_class: str,
     input_directory: Path | CloudPath,
     output_directory: Path | CloudPath | None,
+    max_groups_per_page: int,
     force: bool,
+    number_of_processes: int,
 ) -> None:
-    """Plot per-allele (alpha-beta pair) deconvolution results for MHC2 ligands."""
+    """Plot per-group deconvolution results for MHC ligands."""
     if output_directory is None:
         output_directory = input_directory / "plots"
 
     _check_output_directory(output_directory, force, skip_existing=False)
-    df_model_dirs = find_deconvolution_results_mhc2(input_directory)
-    plot_motifs_and_length_distribution_per_allele_mhc2(df_model_dirs, output_directory)
+    df_model_dirs = find_deconvolution_results(input_directory)
+
+    background = None
+    if mhc_class == "1":
+        backgroud_file_path = input_directory / "background.json"
+        if backgroud_file_path.exists():
+            background = Background.load(backgroud_file_path)
+        else:
+            log.warning(
+                f"Background file {backgroud_file_path} not found, will use default background"
+            )
+
+    plot_motifs_and_length_distribution_per_group(
+        int(mhc_class),
+        df_model_dirs,
+        output_directory,
+        background=background,
+        max_groups_per_page=max_groups_per_page,
+        number_of_processes=number_of_processes,
+    )
 
 
 @click.command()
@@ -263,7 +328,7 @@ def deconvolute_for_cleavage_mhc2(
     min_classes: int,
     max_classes: int,
     number_of_runs: int,
-    disable_tf: bool,
+    disable_c_extension: bool,
     output_all_runs: bool,
     force: bool,
     skip_existing: bool,
@@ -300,9 +365,8 @@ def deconvolute_for_cleavage_mhc2(
     ):
         output_directory_terminus = output_directory / f"deconvolution-{terminus}-terminus"
 
-        log.info(f"Starting to process {terminus}-terminus ...")
-
-        _run_deconvolutions_mhc2(
+        _run_deconvolution(
+            "2",  # MHC class
             SequenceManager(sequences),
             output_directory_terminus,
             background,
@@ -310,7 +374,7 @@ def deconvolute_for_cleavage_mhc2(
             min_classes,
             max_classes,
             number_of_runs,
-            disable_tf,
+            disable_c_extension,
             output_all_runs,
             skip_existing,
         )
@@ -357,41 +421,50 @@ def _check_output_directory(
         raise FileExistsError(f"path {output_directory} exists but is not a directory")
 
 
-def _run_deconvolutions_mhc2(
+def _run_deconvolution(
+    mhc_class: str,
     sequence_manager: SequenceManager,
     output_directory: Path | CloudPath,
-    background_frequencies: BackgroundType,
+    background_frequencies: BackgroundType | None,
     motif_length: int,
     min_classes: int,
     max_classes: int,
     number_of_runs: int,
-    disable_tf: bool,
+    disable_c_extension: bool,
     output_all_runs: bool,
     skip_existing: bool,
 ) -> None:
-    """Run deconvolution for the given sequences.
+    """Run MHC deconvolution for the given sequences.
 
     Args:
+        mhc_class: The MHC class for which to run the deconvolution.
         sequence_manager: The SequenceManager instances containing the sequences.
         output_directory: The output directory.
-        background_frequencies: The background frequencies to be used.
+        background_frequencies: The background frequencies to be used. Only for MHC2.
         motif_length: The length of the motif(s) to be discovered.
         min_classes: The minimum number of classes for which to run the deconvolution.
         max_classes: The maximum number of classes for which to run the deconvolution.
         number_of_runs: The number of EM runs per number of classes.
-        disable_tf: Whether to disable the TensorFlow-based implementation of the EM algorithm.
+        disable_c_extension: Whether to disable the C-implementation of the EM algorithm.
         output_all_runs: Whether to output all EM runs and not just the best per number of classes.
         skip_existing: Whether to skip the deconvolution for existing models.
     """
+    log.info(f"Starting deconvolution, output directory name: {output_directory.name}")
+
+    additional_parameters = []
     runner_class: Any
-    if not disable_tf:
-        from emmo.em.mhc2_tf import EMRunnerMHC2 as EMRunnerMHC2_tf
 
-        runner_class = EMRunnerMHC2_tf
+    if mhc_class == "1":
+        runner_class = EMRunnerMHC1_Python if disable_c_extension else EMRunnerMHC1_C
     else:
-        from emmo.em.mhc2 import EMRunnerMHC2
-
-        runner_class = EMRunnerMHC2
+        runner_class = EMRunnerMHC2_Python if disable_c_extension else EMRunnerMHC2_C
+        if background_frequencies is None:
+            background_frequencies = "MHC2_biondeep"
+            log.info(
+                f"Using default background frequencies '{background_frequencies}' for MHC2 "
+                "deconvolution"
+            )
+        additional_parameters.append(background_frequencies)
 
     for i in range(min_classes, max_classes + 1):
         output_dir_i = output_directory / f"classes_{i}"
@@ -403,7 +476,7 @@ def _run_deconvolutions_mhc2(
             )
             continue
 
-        em_runner = runner_class(sequence_manager, motif_length, i, background_frequencies)
+        em_runner = runner_class(sequence_manager, motif_length, i, *additional_parameters)
         em_runner.run(
             output_dir_i, n_runs=number_of_runs, output_all_runs=output_all_runs, force=True
         )

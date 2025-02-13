@@ -11,12 +11,68 @@ from emmo.io.file import Openable
 from emmo.io.file import save_csv
 from emmo.pipeline.sequences import SequenceManager
 from emmo.utils import logger
-from emmo.utils.alleles import parse_allele_pair
 
 log = logger.get(__name__)
 
 
 SKIP_DIRECTORIES = ["plots"]
+
+
+def check_valid_directory_name(directory_name: str) -> None:
+    """Check if a directory name is valid for Linux and Windows.
+
+    Args:
+        directory_name: The directory name.
+
+    Raises:
+        ValueError: If the directory name is not valid.
+    """
+    # must not be empty
+    if not directory_name:
+        raise ValueError("directory name must not be empty")
+
+    # not any of the following characters: < > : " / \ | ? *
+    if re.search(r"[<>:\"/\\|?*]", directory_name):
+        raise ValueError(
+            'directory name must not contain any of the following characters: < > : " / \\ | ? *'
+        )
+
+    # no reserved strings
+    if directory_name in (
+        ".",
+        "..",
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        "COM1",
+        "COM2",
+        "COM3",
+        "COM4",
+        "COM5",
+        "COM6",
+        "COM7",
+        "COM8",
+        "COM9",
+        "LPT1",
+        "LPT2",
+        "LPT3",
+        "LPT4",
+        "LPT5",
+        "LPT6",
+        "LPT7",
+        "LPT8",
+        "LPT9",
+    ):
+        raise ValueError(f"directory name '{directory_name}' is a reserved string")
+
+    # not ASCII control characters
+    if any(ord(c) < 32 for c in directory_name):
+        raise ValueError("directory name must not contain ASCII control characters")
+
+    # must not begin or end with a space
+    if directory_name[0] == " " or directory_name[-1] == " ":
+        raise ValueError("directory name must not begin or end with a space")
 
 
 def write_matrix(
@@ -110,19 +166,18 @@ def write_responsibilities(
     save_csv(df, directory / f"{file_prefix}responsibilities.csv", force=force)
 
 
-def find_deconvolution_results_mhc2(directory: Openable) -> pd.DataFrame:  # noqa: CCR001
-    """Find models in the output directory of a per-allele deconvolution for MHC2.
+def find_deconvolution_results(directory: Openable) -> pd.DataFrame:  # noqa: CCR001
+    """Find models in the output directory of a per-group deconvolution.
 
     Args:
-        directory: The output directory of the per-allele deconvolution.
+        directory: The output directory of the per-group deconvolution.
 
     Raises:
         ValueError: If no models were found.
 
     Returns:
         A DataFrame containing columns:
-            - 'allele_alpha': The alpha chain.
-            - 'allele_beta': The beta chain.
+            - 'group': The group (i.e. the corresponding subdirectory name).
             - 'number_of_classes': Number of classes used in the deconvolution.
             - 'model_path': The path to the model directory.
     """
@@ -130,20 +185,13 @@ def find_deconvolution_results_mhc2(directory: Openable) -> pd.DataFrame:  # noq
 
     data = []
 
-    for allele_dir in directory.iterdir():
-        if not allele_dir.is_dir() or allele_dir.name in SKIP_DIRECTORIES:
+    for group_dir in directory.iterdir():
+        if not group_dir.is_dir() or group_dir.name in SKIP_DIRECTORIES:
             continue
 
-        try:
-            allele_alpha, allele_beta = parse_allele_pair(allele_dir.name)
-        except ValueError:
-            log.warning(
-                f"input directory contains the subdirectory '{allele_dir.name}' from which the "
-                "alpha and beta alleles could not be parsed"
-            )
-            continue
+        group = group_dir.name
 
-        for model_dir in allele_dir.iterdir():
+        for model_dir in group_dir.iterdir():
             if not model_dir.is_dir() or model_dir.name in SKIP_DIRECTORIES:
                 continue
 
@@ -153,8 +201,7 @@ def find_deconvolution_results_mhc2(directory: Openable) -> pd.DataFrame:  # noq
 
             data.append(
                 {
-                    "allele_alpha": allele_alpha,
-                    "allele_beta": allele_beta,
+                    "group": group,
                     "number_of_classes": number_of_classes,
                     "model_path": model_dir,
                 }
@@ -163,9 +210,7 @@ def find_deconvolution_results_mhc2(directory: Openable) -> pd.DataFrame:  # noq
     if not data:
         raise ValueError(f"no model directories found in input directory '{directory}'")
 
-    return pd.DataFrame(data).sort_values(
-        by=["allele_alpha", "allele_beta", "number_of_classes"], ignore_index=True
-    )
+    return pd.DataFrame(data).sort_values(by=["group", "number_of_classes"], ignore_index=True)
 
 
 def _get_number_of_classes(model_dir: AnyPath) -> int | None:

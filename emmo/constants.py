@@ -42,3 +42,8 @@ MODELS_DIRECTORY = REPO_DIRECTORY / "models"
 AVAILABLE_MODEL_DIRECTORIES = [
     MODELS_DIRECTORY / subdir for subdir in ("binding_predictor", "cleavage")
 ]
+
+# default column names
+MHC1_ALLELE_COL = "allele"
+MHC2_ALPHA_COL = "allele_alpha"
+MHC2_BETA_COL = "allele_beta"

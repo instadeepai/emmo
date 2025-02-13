@@ -10,19 +10,21 @@ import pandas as pd
 from cloudpathlib import AnyPath
 from cloudpathlib import CloudPath
 
+from emmo.constants import MHC2_ALPHA_COL
+from emmo.constants import MHC2_BETA_COL
 from emmo.constants import MHC2_BINDING_CORE_SIZE
 from emmo.constants import MODELS_DIRECTORY
 from emmo.io.file import load_csv
 from emmo.io.file import load_yml
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
-from emmo.io.output import find_deconvolution_results_mhc2
+from emmo.io.output import find_deconvolution_results
 from emmo.models.deconvolution import DeconvolutionModelMHC2
 from emmo.models.prediction import PredictorMHC2
 from emmo.models.prediction import SelectedModel
 from emmo.pipeline.background import Background
 from emmo.utils import logger
-from emmo.utils.alleles import parse_allele_pair
+from emmo.utils.alleles import parse_mhc2_allele_pair
 from emmo.utils.click import arguments
 from emmo.utils.click import callback
 from emmo.utils.viz import plot_predictor_mhc2
@@ -423,8 +425,8 @@ def _select_models(
         'model_path'.
     """
     available_models = {
-        (row["allele_alpha"], row["allele_beta"], row["number_of_classes"]): row["model_path"]
-        for _, row in find_deconvolution_results_mhc2(models_directory).iterrows()
+        (*parse_mhc2_allele_pair(row["group"]), row["number_of_classes"]): row["model_path"]
+        for _, row in find_deconvolution_results(models_directory).iterrows()
     }
 
     num_allele_pairs = len(
@@ -501,7 +503,7 @@ def _select_alternative_models(
         ValueError: If the value of 'classes' is smaller than that of 'motif'.
         ValueError: If the selected number of classes is not among the available models.
     """
-    allele_alpha, allele_beta = parse_allele_pair(allele)
+    allele_alpha, allele_beta = parse_mhc2_allele_pair(allele)
     allele = f"{allele_alpha}-{allele_beta}"
 
     if not selection.get("keep", True):
@@ -550,8 +552,8 @@ def _score_with_deconvolution_models(
         this class), and whether the best class is equal to the motif for the deconvolution model.
     """
     peptide = row["peptide"]
-    allele_alpha = row["allele_alpha"]
-    allele_beta = row["allele_beta"]
+    allele_alpha = row[MHC2_ALPHA_COL]
+    allele_beta = row[MHC2_BETA_COL]
     allele = f"{allele_alpha}-{allele_beta}"
 
     if allele not in selected_models:

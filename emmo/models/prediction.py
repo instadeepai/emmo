@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 from cloudpathlib import AnyPath
 
+from emmo.constants import MHC2_ALPHA_COL
+from emmo.constants import MHC2_BETA_COL
 from emmo.io.file import load_csv
 from emmo.io.file import load_json
 from emmo.io.file import Openable
@@ -23,7 +25,7 @@ from emmo.pipeline.background import BackgroundType
 from emmo.pipeline.sequences import SequenceManager
 from emmo.resources.length_distribution import get_length_distribution
 from emmo.utils import logger
-from emmo.utils.alleles import parse_allele_pair
+from emmo.utils.alleles import parse_mhc2_allele_pair
 from emmo.utils.exceptions import NoSequencesError
 from emmo.utils.motifs import information_content
 from emmo.utils.motifs import position_probability_matrix
@@ -116,7 +118,7 @@ class PredictorMHC2:
         for file in (directory / "binding").iterdir():
             if file.is_file() and file.suffix == ".csv":
                 try:
-                    allele_alpha, allele_beta = parse_allele_pair(file.stem)
+                    allele_alpha, allele_beta = parse_mhc2_allele_pair(file.stem)
                     allele = f"{allele_alpha}-{allele_beta}"
                 except ValueError:
                     log.warning(
@@ -442,8 +444,8 @@ class PredictorMHC2:
         self,
         df: pd.DataFrame,
         peptide_column: str = "peptide",
-        allele_alpha_column: str = "allele_alpha",
-        allele_beta_column: str = "allele_beta",
+        allele_alpha_column: str = MHC2_ALPHA_COL,
+        allele_beta_column: str = MHC2_BETA_COL,
         column_prefix: str = "emmo",
         inplace: bool = False,
         score_length: bool = False,

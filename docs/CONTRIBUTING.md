@@ -169,8 +169,8 @@ Here are guidelines regarding some aspects that couldn't be checked by the `pre-
   - Follow the
     [Google style guide](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings).
   - Do not specify typing.
-- If a function is dealing with tensorflow tensors or numpy arrays (as arguments or returned value),
-  put the shape in the docstring description and use `?` for batch size, e.g. `(?, seq_len)`.
+- If a function is dealing with tensors or numpy arrays (as arguments or returned value), put the
+  shape in the docstring description and use `?` for batch size, e.g. `(?, seq_len)`.
 - Use `f-string` to format variables in string instead of `%` or `format`.
 - Use list comprehension instead of `map`/`filter`.
 - Use `pathlib.Path` to deal with local paths and `cloudpathlib.CloudPath` to deal with remote
@@ -220,8 +220,8 @@ Here are guidelines regarding some aspects that couldn't be checked by the `pre-
         ```
 
 - Do not add blank line after `for`/`if`/`elif`/`else`/`while` statements.
-- When dealing with tensorflow tensors or numpy arrays, put the shape as comment in the line before
-  and use `?` for batch size.
+- When dealing with tensors or numpy arrays, put the shape as comment in the line before and use `?`
+  for batch size.
 
   ??? Example
 

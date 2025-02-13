@@ -404,11 +404,6 @@ static int expectation_maximization(EMStruct *em) {
       printf("Estimating frequencies, %d EM steps, logL = %f ...\n", steps + 1,
              log_likelihood_pssm);
     }
-
-    if (steps > 100) {
-      PyErr_SetString(PyExc_RuntimeError, "EM algorithm did not converge.");
-      return -1;
-    }
   }
 
   /* When the EM algorithm is finished, compute also the log likelihood of the
