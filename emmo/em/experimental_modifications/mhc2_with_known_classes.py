@@ -49,7 +49,7 @@ class EMRunnerMHC2KnownClasses(EMRunnerMHC2):
             background,
         )
 
-        if self.sm.classes is None:
+        if not hasattr(self.sm, "classes"):
             raise RuntimeError("class information is not available")
         self.classes: list[str] = self.sm.classes
 

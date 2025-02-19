@@ -343,7 +343,7 @@ class VariableLengthEM:
         Returns:
             The mapping from class name to index.
         """
-        if self.sm.classes is None:
+        if not hasattr(self.sm, "classes"):
             raise RuntimeError("class information is not available")
 
         class_set = sorted(set(self.sm.classes))
@@ -399,7 +399,7 @@ class VariableLengthEM:
                 self.similarity_weights[length],
             )
             self.runners[length]._initialize_with_known_classes(
-                self.sm.size_sorted_classes[length], class_mapping
+                self.sm.get_size_sorted_features("classes")[length], class_mapping
             )
 
         # initialize PPMs and class weight based on initial responsibilities
