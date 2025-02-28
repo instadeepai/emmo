@@ -48,7 +48,7 @@ pip install -e .
    pre-commit install -t pre-commit -t commit-msg
    ```
 
-1. _[Only for dev changes]_ Refer to the [contributing document](../CONTRIBUTING.md) for further
+1. _[Only for dev changes]_ Refer to the [contributing document](CONTRIBUTING.md) for further
    contributing guidelines for the project.
 
 ### Setup remote files support

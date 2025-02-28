@@ -194,10 +194,11 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
             responsibilities = self.responsibilities_by_length[length]
 
             for s, c in itertools.product(range(n_sequences), range(self.number_of_classes)):
+                resp = responsibilities[s, c]
+
                 # if the sequence and motif length are equal, we want the whole sequence to
                 # contribute
                 if length == self.motif_length:
-                    resp = responsibilities[s, c]
                     for pos, a in enumerate(sequences[s]):
                         self.current_ppm[c, pos, a] += resp
                     continue
@@ -205,7 +206,6 @@ class EMRunnerMHC1(BaseEMRunnerMHC1):
                 # otherwise, only the N- and C-terminal positions contribute
                 n_start = n_pos[s, c]
                 c_start = c_pos[s, c]
-                resp = responsibilities[s, c]
 
                 # contribution of the N-terminal part of the motif
                 for pos in range(n_start, n_start + self.n_term):

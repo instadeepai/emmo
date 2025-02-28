@@ -82,6 +82,8 @@ nav:
       - As a Python Library: usage/library.md
   - Explanations:
       - explanations/em_algorithm.md
+      - EM Algorithm Variations:
+          - explanations/em_algorithm_per_group_background.md
       - explanations/prediction_mhc2.md
       - explanations/panallelic_prediction.md
       - explanations/remote_files.md
