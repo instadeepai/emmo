@@ -187,6 +187,8 @@ class BaseEMRunnerMHC2(BaseRunner):
         model.training_params["min_log_likelihood_error"] = self.min_error
         model.training_params["pseudocount"] = self.pseudocount
 
+        model.training_params["runner_class"] = self.__class__.__name__
+
         return model
 
     def _write_responsibilities(

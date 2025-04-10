@@ -5,6 +5,7 @@ import collections
 import itertools
 from collections import Counter
 from collections import defaultdict
+from typing import Any
 
 import numpy as np
 
@@ -21,27 +22,26 @@ class SequenceManager:
         self,
         sequences: list[str],
         alphabet: str = "default",
-        classes: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """Initialize the SequenceManager class.
+
+        Additional information and features that are associated with the sequences can be added
+        as keyword arguments. They must be of type list of the same length as the sequences. They
+        will be stored in the SequenceManager object and can be accessed by the name of the keyword.
 
         Args:
             sequences: The sequences.
             alphabet: The alphabet to use. Can be one of 'default' (natural amino acids), 'infer'
                 (use characters appearing in the input sequences), or a string containing the
                 characters explicitly.
-            classes: A list containing the classes to which the each individual sequence belongs.
 
         Raises:
-            ValueError: If 'classes' are provided but the number of sequences and the length of the
-                'classes' list differ.
+            ValueError: If the sequences contain letters that are not in the provided alphabet.
+            ValueError: If the additional information is not a list or has a different length than
+                the sequences.
         """
         self.sequences = sequences
-        self.classes = classes
-
-        if self.classes is not None:
-            if len(self.sequences) != len(self.classes):
-                raise ValueError("the sequence and classes lists must have the same length")
 
         letters_in_sequences = {a for seq in self.sequences for a in seq}
 
@@ -63,7 +63,16 @@ class SequenceManager:
 
         self.aa2idx = {a: i for i, a in enumerate(self.alphabet)}
 
+        for key, value in kwargs.items():
+            if not isinstance(value, list):
+                raise ValueError(f"the {key} must be a list")
+            if len(value) != len(self.sequences):
+                raise ValueError(f"the {key} list must have the same length as the sequences")
+            setattr(self, key, value)
+
         self._similarity_weights: dict[int, np.ndarray] = {}
+
+        self._size_sorted_features: dict[str, dict[int, Any]] = {}
 
     @property
     def number_of_sequences(self) -> int:
@@ -73,13 +82,7 @@ class SequenceManager:
     @property
     def size_sorted_sequences(self) -> dict[int, list[str]]:
         """Dict mapping the sequence lengths to the corresponding sublists of sequences."""
-        if not hasattr(self, "_size_sorted_sequences"):
-            self._size_sorted_sequences: dict[int, list[str]] = defaultdict(list)
-
-            for seq in self.sequences:
-                self._size_sorted_sequences[len(seq)].append(seq)
-
-        return self._size_sorted_sequences
+        return self.get_size_sorted_features("sequences")
 
     @property
     def min_length(self) -> int:
@@ -90,24 +93,6 @@ class SequenceManager:
     def max_length(self) -> int:
         """The maximal length among all sequences sequences."""
         return max(self.size_sorted_sequences.keys())
-
-    @property
-    def size_sorted_classes(self) -> dict[int, list[str]]:
-        """Dict mapping the sequence lengths to the corresponding sublists of class annotations.
-
-        Raises:
-            RuntimeError: If no class information is available.
-        """
-        if not self.classes:
-            raise RuntimeError("classes have not been set")
-
-        if not hasattr(self, "_size_sorted_classes"):
-            self._size_sorted_classes: dict[int, list[str]] = defaultdict(list)
-
-            for i, seq in enumerate(self.sequences):
-                self.size_sorted_classes[len(seq)].append(self.classes[i])
-
-        return self._size_sorted_classes
 
     @property
     def order_in_input_file(self) -> list[tuple[int, int]]:
@@ -131,8 +116,8 @@ class SequenceManager:
     @property
     def size_sorted_arrays(self) -> dict[int, np.ndarray]:
         """Dict mapping the sequence lengths to the index-encoded arrays of sequences."""
-        if not hasattr(self, "_size_sorted_arrays"):
-            self._size_sorted_arrays: dict[int, np.ndarray] = defaultdict(list)
+        if "_arrays" not in self._size_sorted_features:
+            _size_sorted_arrays: dict[int, np.ndarray] = defaultdict(list)
 
             for length, seqs in self.size_sorted_sequences.items():
                 array = np.zeros((len(seqs), length), dtype=np.uint16)
@@ -141,9 +126,11 @@ class SequenceManager:
                     for j, a in enumerate(seq):
                         array[i, j] = self.aa2idx[a]
 
-                self._size_sorted_arrays[length] = array
+                _size_sorted_arrays[length] = array
 
-        return self._size_sorted_arrays
+            self._size_sorted_features["_arrays"] = _size_sorted_arrays
+
+        return self._size_sorted_features["_arrays"]
 
     @property
     def frequencies(self) -> np.ndarray:
@@ -170,34 +157,77 @@ class SequenceManager:
         """
         sequences = load_txt(file_path)
 
-        return cls(sequences, alphabet=alphabet, classes=None)
+        return cls(sequences, alphabet=alphabet)
 
     @classmethod
     def load_from_csv(
         cls,
         file_path: Openable,
         sequence_column: str,
-        class_column: str | None = None,
         alphabet: str = "default",
+        additional_columns: list[str] | None = None,
+        additional_columns_attr_name: dict[str, str] | None = None,
+        additional_columns_types: dict[str, type] | None = None,
     ) -> SequenceManager:
-        """Read sequences from a csv file, optianally with associated class information.
+        """Read sequences from a csv file, optionally with associated class information.
+
+        Additional information and features that are available in the csv file can be added loaded
+        using the additional_columns and additional_columns_types arguments. By default, the
+        additional features are converted to strings.
 
         Args:
             file_path: The path to the csv file.
             sequence_column: The name of the column containing the sequences.
-            class_column: The name of the column containing the class information.
             alphabet: The alphabet to use. Can be one of 'default' (natural amino acids), 'infer'
                 (use characters appearing in the input sequences), or a string containing the
                 characters explicitly.
+            additional_columns: The names of the columns containing additional information.
+            additional_columns_attr_names: The names of the attributes to store the additional
+                information. If not provided, the column names are used.
+            additional_columns_types: The types of the additional columns.
 
         Returns:
-            A sequence manager containing the loaded sequences and optianally the class information.
+            A sequence manager containing the loaded sequences and optionally the class information.
         """
         df = load_csv(file_path)
         sequences = df[sequence_column].astype(str).tolist()
-        classes = df[class_column].astype(str).tolist() if class_column is not None else None
 
-        return cls(sequences, alphabet=alphabet, classes=classes)
+        kwargs = {}
+        if additional_columns is not None:
+            for column in additional_columns:
+                if additional_columns_attr_name:
+                    name = additional_columns_attr_name.get(column, column)
+                else:
+                    name = column
+
+                if additional_columns_types:
+                    dtype_ = additional_columns_types.get(column, str)
+                else:
+                    dtype_ = str
+
+                kwargs[name] = df[column].astype(dtype_).tolist()
+
+        return cls(sequences, alphabet=alphabet, **kwargs)
+
+    def get_size_sorted_features(self, feature: str) -> dict[int, list[str]]:
+        """Dict mapping the sequence lengths to the corresponding sublists of sequence features.
+
+        Raises:
+            ValueError: If the feature is not available.
+        """
+        if not hasattr(self, feature):
+            raise ValueError(f"the feature '{feature}' is not available")
+
+        if feature not in self._size_sorted_features:
+            size_sorted_feature: dict[int, list[Any]] = defaultdict(list)
+            feature_list = getattr(self, feature)
+
+            for i, seq in enumerate(self.sequences):
+                size_sorted_feature[len(seq)].append(feature_list[i])
+
+            self._size_sorted_features[feature] = size_sorted_feature
+
+        return self._size_sorted_features[feature]
 
     def sequences_as_indices(self) -> list[list[int]]:
         """The sequences encoded by the alphabet indices.

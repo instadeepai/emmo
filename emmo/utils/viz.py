@@ -110,6 +110,31 @@ def plot_single_ppm(
     lm.Logo(_df, **LOGO_PROPS, ax=ax)
 
 
+def plot_deconvolution_model_motifs(
+    model: DeconvolutionModel,
+    title: str = "",
+    background: BackgroundType | None = None,
+    axs: Axes | np.ndarray[Axes] | None = None,
+) -> None:
+    """Plot the motifs of a deconvolution model.
+
+    Args:
+        model: The model.
+        title: The title for the plot.
+        background: The background frequencies to be used. If this is not provided and the model
+            is of type DeconvolutionModelMHC2, then the background associated with the model will be
+            used.
+        axs: If provided, the Axes instance(s) used for plotting.
+    """
+    if axs is None:
+        number_of_classes = model.number_of_classes
+        _, axs = plt.subplots(1, number_of_classes, figsize=(6 * number_of_classes, 4))
+
+    _plot_model_to_axes(model, title, axs, background=background)
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_mhc2_model(
     model: DeconvolutionModelMHC2,
     title: str = "",
@@ -122,13 +147,7 @@ def plot_mhc2_model(
         title: The title for the plot.
         axs: If provided, the Axes instance(s) used for plotting.
     """
-    if axs is None:
-        number_of_classes = model.number_of_classes
-        _, axs = plt.subplots(1, number_of_classes, figsize=(6 * number_of_classes, 4))
-
-    _plot_model_to_axes(model, title, axs)
-    plt.tight_layout()
-    plt.show()
+    plot_deconvolution_model_motifs(model, title, axs=axs)
 
 
 def plot_cleavage_model(model: CleavageModel, save_as: Openable | None = None) -> None:

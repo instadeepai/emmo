@@ -5,7 +5,6 @@ This predictor is similar to MixMHC2pred (Racle et al. 2019).
 from __future__ import annotations
 
 from typing import Any
-from typing import TypedDict
 
 import numpy as np
 import pandas as pd
@@ -22,6 +21,7 @@ from emmo.models.cleavage import CleavageModel
 from emmo.models.deconvolution import DeconvolutionModelMHC2
 from emmo.pipeline.background import Background
 from emmo.pipeline.background import BackgroundType
+from emmo.pipeline.model_selection import SelectedModel
 from emmo.pipeline.sequences import SequenceManager
 from emmo.resources.length_distribution import get_length_distribution
 from emmo.utils import logger
@@ -33,18 +33,6 @@ from emmo.utils.offsets import AlignedOffsets
 from emmo.utils.sequence_distance import nearest_neighbors
 
 log = logger.get(__name__)
-
-
-class SelectedModel(TypedDict, total=False):
-    """Dictionary defining the selected model and motif for a specific allele."""
-
-    classes: int
-    motif: int
-    model_path: Openable
-    comment: str
-    model: DeconvolutionModelMHC2
-    effective_peptide_number: float
-    motif_weight: float
 
 
 class PredictorMHC2:

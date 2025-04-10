@@ -174,7 +174,6 @@ def test_load_from_txt(txt_file_path: Path, example_sequences: list[str]) -> Non
     sequence_manager = SequenceManager.load_from_txt(txt_file_path)
 
     assert sequence_manager.sequences == example_sequences
-    assert sequence_manager.classes is None
     assert sequence_manager.number_of_sequences == len(example_sequences)
     assert sequence_manager.min_length == min([len(seq) for seq in example_sequences])
     assert sequence_manager.max_length == max([len(seq) for seq in example_sequences])
@@ -186,9 +185,16 @@ def test_load_from_csv(
     example_classes: list[str],
 ) -> None:
     """Test that loading a CSV file works as expected."""
-    sequence_manager = SequenceManager.load_from_csv(csv_file_path, "peptide", class_column="class")
+    sequence_manager = SequenceManager.load_from_csv(
+        csv_file_path,
+        "peptide",
+        additional_columns=["class"],
+        additional_columns_attr_name={"class": "classes"},
+    )
 
     assert sequence_manager.sequences == example_sequences
+    assert not hasattr(sequence_manager, "class")
+    assert hasattr(sequence_manager, "classes")
     assert sequence_manager.classes == example_classes
     assert len(sequence_manager.sequences) == len(sequence_manager.classes)
     assert sequence_manager.min_length == min([len(seq) for seq in example_sequences])
@@ -199,11 +205,12 @@ def test_load_from_csv_wo_classes(
     csv_file_path: Path,
     example_sequences: list[str],
 ) -> None:
-    """Test that loading a CSV file without setting 'class_column' works as expected."""
+    """Test that loading a CSV file without additional columns works as expected."""
     sequence_manager = SequenceManager.load_from_csv(csv_file_path, "peptide")
 
     assert sequence_manager.sequences == example_sequences
-    assert sequence_manager.classes is None
+    assert not hasattr(sequence_manager, "class")
+    assert not hasattr(sequence_manager, "classes")
 
 
 def test_sequences_as_indices(
@@ -240,15 +247,15 @@ def test_size_sorted_arrays(
         assert np.all(size_sorted_arrays[length] == expected_size_sorted_arrays[length])
 
 
-def test_size_sorted_classes(
+def test_get_size_sorted_features(
     example_sequences: list[str],
     example_classes: list[str],
     expected_size_sorted_classes: dict[int, list[str]],
 ) -> None:
-    """Test that 'size_sorted_classes' works as expected."""
+    """Test that 'get_size_sorted_features' works as expected."""
     sequence_manager = SequenceManager(example_sequences, classes=example_classes)
 
-    assert sequence_manager.size_sorted_classes == expected_size_sorted_classes
+    assert sequence_manager.get_size_sorted_features("classes") == expected_size_sorted_classes
 
 
 def test_split_array_by_size(
