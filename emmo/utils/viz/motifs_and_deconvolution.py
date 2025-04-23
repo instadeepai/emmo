@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import concurrent.futures
 import math
-import tempfile
-from pathlib import Path
 from typing import Any
 
 import logomaker as lm
@@ -12,13 +10,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from cloudpathlib import AnyPath
-from cloudpathlib import CloudPath
 from matplotlib.axes._axes import Axes
-from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 
-from emmo.bucket.io import upload_to_directory
 from emmo.constants import NATURAL_AAS
+from emmo.io.file import load_csv
 from emmo.io.file import Openable
 from emmo.models.cleavage import CleavageModel
 from emmo.models.deconvolution import DeconvolutionModel
@@ -30,6 +26,7 @@ from emmo.pipeline.background import BackgroundType
 from emmo.utils import logger
 from emmo.utils.alleles import parse_mhc1_allele_pair
 from emmo.utils.alleles import parse_mhc2_allele_pair
+from emmo.utils.viz.common import save_plot
 
 log = logger.get(__name__)
 
@@ -39,39 +36,6 @@ COLOR_DEFAULT = "royalblue"
 COLOR_DEFAULT_LIGHT = "skyblue"
 COLOR_ALT = "sienna"
 COLOR_ALT_LIGHT = "bisque"
-
-
-def save_plot(file_path: Openable, figures: list[Figure] | None = None) -> None:
-    """Save the current plot locally or remotely and close it.
-
-    Args:
-        file_path: Local or remote path where to save the plot.
-        figures: List of Figure instances to save.
-    """
-    file_path = AnyPath(file_path)
-
-    if isinstance(file_path, CloudPath):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_file = Path(tmp_dir) / file_path.name
-            if figures is not None:
-                with PdfPages(tmp_file) as pdf:
-                    for fig in figures:
-                        pdf.savefig(fig)
-            else:
-                plt.savefig(tmp_file)
-            upload_to_directory(tmp_file, file_path.parent, force=True)
-    else:
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        if figures is not None:
-            with PdfPages(file_path) as pdf:
-                for fig in figures:
-                    pdf.savefig(fig)
-        else:
-            plt.savefig(file_path)
-
-    log.info(f"Saved plot at {file_path}")
-
-    plt.close()
 
 
 def plot_single_ppm(
@@ -394,7 +358,7 @@ def _plot_motifs_and_length_distribution_per_group_single_page(
         _plot_class_weights_to_axes(model, group, list(axs[i, 1:-2:3]) + [axs[i, -2]])
         _plot_length_distribution_from_responsibilities(
             model,
-            pd.read_csv(model_path / "responsibilities.csv"),
+            load_csv(model_path / "responsibilities.csv"),
             group,
             list(axs[i, 2:-2:3]) + [axs[i, -1]],
             include_flat=True,

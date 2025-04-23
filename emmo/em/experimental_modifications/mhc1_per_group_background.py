@@ -11,6 +11,10 @@ import itertools
 import numpy as np
 
 from emmo.constants import MHC1_ALLELE_COL
+from emmo.constants import MHC1_C_TERMINAL_ANCHORING_LENGTH
+from emmo.constants import MHC1_C_TERMINAL_OVERHANG_PENALTY
+from emmo.constants import MHC1_N_TERMINAL_ANCHORING_LENGTH
+from emmo.constants import MHC1_N_TERMINAL_OVERHANG_PENALTY
 from emmo.em.mhc1 import EMRunnerMHC1
 from emmo.models.deconvolution import DeconvolutionModelMHC1
 from emmo.pipeline.sequences import SequenceManager
@@ -25,10 +29,10 @@ class EMRunnerMHC1PerGroupBackground(EMRunnerMHC1):
         motif_length: int,
         number_of_classes: int,
         group2ppm: dict[str, np.ndarray],
-        n_term: int = 3,
-        c_term: int = 2,
-        n_term_penalty: float = 0.05,
-        c_term_penalty: float = 0.2,
+        n_term: int = MHC1_N_TERMINAL_ANCHORING_LENGTH,
+        c_term: int = MHC1_C_TERMINAL_ANCHORING_LENGTH,
+        n_term_penalty: float = MHC1_N_TERMINAL_OVERHANG_PENALTY,
+        c_term_penalty: float = MHC1_C_TERMINAL_OVERHANG_PENALTY,
         group_attribute: str = MHC1_ALLELE_COL,
     ) -> None:
         """Initialize the class for running the deconvolution.

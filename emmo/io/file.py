@@ -321,7 +321,9 @@ def load_csv(file_path: Openable, **kwargs: Any) -> pd.DataFrame:
             f"Mismatch between 'compression={compression}' and file's extension {file_path}"
         )
 
-    return _load_file(file_path=file_path, load_fn=pd.read_csv, from_file_obj=False, **kwargs)
+    return _load_file(file_path=file_path, load_fn=pd.read_csv, from_file_obj=False, **kwargs).drop(
+        columns=["Unnamed: 0"], errors="ignore"
+    )
 
 
 def save_csv(

@@ -11,6 +11,8 @@ from time import perf_counter
 
 import numpy as np
 
+from emmo.constants import MHC1_C_TERMINAL_OVERHANG_PENALTY
+from emmo.constants import MHC1_N_TERMINAL_OVERHANG_PENALTY
 from emmo.io.file import Openable
 from emmo.io.output import write_matrices
 from emmo.io.output import write_responsibilities
@@ -20,9 +22,6 @@ from emmo.pipeline.sequences import SequenceManager
 
 PSEUDO_COUNT_PRIOR = 0.1
 MIN_ERROR = 0.001
-
-N_TERM_PENALTY = 0.05
-C_TERM_PENALTY = 0.2
 
 
 class EqualLengthEM:
@@ -366,7 +365,7 @@ class ClassWeightsEM:
 
             for n_start in range(self.len_seq - self.n_motif + 1):
                 # penalty if motif does not start at first position
-                resp_n_term = N_TERM_PENALTY**n_start
+                resp_n_term = MHC1_N_TERMINAL_OVERHANG_PENALTY**n_start
 
                 for pos in range(self.n_term):
                     resp_n_term *= self.pwm[c, pos, self.sequences[s, pos + n_start]]
@@ -375,7 +374,9 @@ class ClassWeightsEM:
                     n_start + self.n_motif - self.c_term, self.len_seq - self.c_term + 1
                 ):
                     # penalty if motif does not end at last position
-                    resp_c_term = C_TERM_PENALTY ** (self.len_seq - c_start - self.c_term)
+                    resp_c_term = MHC1_C_TERMINAL_OVERHANG_PENALTY ** (
+                        self.len_seq - c_start - self.c_term
+                    )
                     for pos in range(self.c_term):
                         resp_c_term *= self.pwm[
                             c,

@@ -35,6 +35,8 @@ NATURAL_AAS: tuple[str, ...] = (
 AA2IDX = {aa: idx for idx, aa in enumerate(NATURAL_AAS)}
 NUM_AAS = len(NATURAL_AAS)
 
+MHC1_LENGTH_RANGE = (8, 14)
+
 MHC2_BINDING_CORE_SIZE = 9
 
 DATA_DIRECTORY = REPO_DIRECTORY / "data"
@@ -47,3 +49,12 @@ AVAILABLE_MODEL_DIRECTORIES = [
 MHC1_ALLELE_COL = "allele"
 MHC2_ALPHA_COL = "allele_alpha"
 MHC2_BETA_COL = "allele_beta"
+
+# lengths of the N- and C-terminal parts of MHC1 ligands that are considered most important
+# for anchoring the peptide to the MHC1 molecule
+MHC1_N_TERMINAL_ANCHORING_LENGTH = 3
+MHC1_C_TERMINAL_ANCHORING_LENGTH = 2
+
+# MHC1 N-terminal and C-terminal overhang penalties, default values as in MixMHCp
+MHC1_N_TERMINAL_OVERHANG_PENALTY = 0.05
+MHC1_C_TERMINAL_OVERHANG_PENALTY = 0.2

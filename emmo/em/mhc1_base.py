@@ -7,6 +7,10 @@ import numpy as np
 import pandas as pd
 from cloudpathlib import AnyPath
 
+from emmo.constants import MHC1_C_TERMINAL_ANCHORING_LENGTH
+from emmo.constants import MHC1_C_TERMINAL_OVERHANG_PENALTY
+from emmo.constants import MHC1_N_TERMINAL_ANCHORING_LENGTH
+from emmo.constants import MHC1_N_TERMINAL_OVERHANG_PENALTY
 from emmo.em.base_runner import BaseRunner
 from emmo.io.file import Openable
 from emmo.io.file import save_csv
@@ -23,10 +27,10 @@ class BaseEMRunnerMHC1(BaseRunner):
         sequence_manager: SequenceManager,
         motif_length: int,
         number_of_classes: int,
-        n_term: int = 3,
-        c_term: int = 2,
-        n_term_penalty: float = 0.05,
-        c_term_penalty: float = 0.2,
+        n_term: int = MHC1_N_TERMINAL_ANCHORING_LENGTH,
+        c_term: int = MHC1_C_TERMINAL_ANCHORING_LENGTH,
+        n_term_penalty: float = MHC1_N_TERMINAL_OVERHANG_PENALTY,
+        c_term_penalty: float = MHC1_C_TERMINAL_OVERHANG_PENALTY,
     ) -> None:
         """Initialize the base class.
 
@@ -126,6 +130,10 @@ class BaseEMRunnerMHC1(BaseRunner):
         model.training_params["random_seed"] = self.random_seed
         model.training_params["min_log_likelihood_error"] = self.min_error
         model.training_params["pseudocount"] = self.pseudocount
+        model.training_params["n_term"] = self.n_term
+        model.training_params["c_term"] = self.c_term
+        model.training_params["n_term_penalty"] = self.n_term_penalty
+        model.training_params["c_term_penalty"] = self.c_term_penalty
 
         model.training_params["runner_class"] = self.__class__.__name__
 
