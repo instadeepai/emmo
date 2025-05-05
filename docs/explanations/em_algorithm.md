@@ -4,14 +4,14 @@ Fitting mixture models using expectation-maximization (EM) algorithms is a class
 approach to _de novo_ sequence motif discovery
 [(Bailey and Elkan, 1994)](https://pubmed.ncbi.nlm.nih.gov/7584402/).
 
-## EM-based deconvolution for MHC-I
+## EM-based deconvolution for MHC1
 
 EMMo implements a version of [MixMHCp](https://mixmhcp.org/#/submission)
-[(Gfeller et al., 2019)](https://www.ncbi.nlm.nih.gov/pubmed/30429286), which is an EM-based method
-for (i) identification of MHC-II binding core motifs and (ii) deconvolution of multi-allelic of
-MHC-I ligand samples. The method takes as input a list of $N$ peptides and (a range of) the number
-$K$ of classes, which correspond to the alleles/specificities that are expected to be contained in
-the list. The EM algorithm then aims at maximizing the following log likelihood function:
+[(Gfeller et al., 2018)](https://www.ncbi.nlm.nih.gov/pubmed/30429286), which is an EM-based method
+for (i) identification of MHC2 binding core motifs and (ii) deconvolution of multi-allelic of MHC1
+ligand samples. The method takes as input a list of $N$ peptides and (a range of) the number $K$ of
+classes, which correspond to the alleles/specificities that are expected to be contained in the
+list. The EM algorithm then aims at maximizing the following log likelihood function:
 
 $$
 \log(\mathcal{L}) =
@@ -113,12 +113,12 @@ log likelihood difference between two steps falls below a user-defined threshold
 Usually the EM algorithm is run multiple times with different initializations and the run with the
 highest $\log(\mathcal{L})$ is reported as output.
 
-## EM-based deconvolution for MHC-II
+## EM-based deconvolution for MHC2
 
 EMMo implements a version of [MoDec](https://github.com/GfellerLab/MoDec)
 [(Racle et al., 2019)](https://www.nature.com/articles/s41587-019-0289-6), which is an EM-based
-method adapted for the purpose of (i) identification of MHC-II binding core motifs and (ii)
-deconvolution of multi-allelic of MHC-II ligand samples. The method takes as input a list of $N$
+method adapted for the purpose of (i) identification of MHC2 binding core motifs and (ii)
+deconvolution of multi-allelic of MHC2 ligand samples. The method takes as input a list of $N$
 peptides and (a range of) the number $K$ of classes, which correspond to the alleles/specificities
 that are expected to be contained in the list. The EM algorithm then aims at maximizing the
 following log likelihood function:
@@ -145,7 +145,7 @@ The parameters to be fitted are:
 - $\theta^k$, $1\le k\le K$, the $k$th binding core motif of length $L$
 - $w_{k,s}$ the weight (or prior probability) of class $k$ and offset $s$
 
-To account for the binding core offset preferences of MHC-II molecules towards the center of the
+To account for the binding core offset preferences of MHC2 molecules towards the center of the
 peptide, the offset weights $w_{k,s}$ to be fitted are shared between peptides of different lengths
 and centered such that $s=0$ refers to the core that is exactly in the middle of the peptide. The
 maximal shift $S$ from the center depends on the maximal peptide length in the sample and the
@@ -165,7 +165,7 @@ is usually given by the maximal responsibility value per peptide when the EM alg
 converged.
 
 Since the source code of MoDec is not available, some implementation details may differ in EMMo. For
-example, we use a similar initialization for the responsibilities as for MHC-I (rather than randomly
+example, we use a similar initialization for the responsibilities as for MHC1 (rather than randomly
 initializing $\theta$ and $w_{k, s}$) and then start with a maximization step. To be specific, we
 randomly assign each peptide to a class (if possible, ensuring that at least one peptide is assigned
 to each class) and use a uniform distribution for the offset dimension of the responsibility matrix

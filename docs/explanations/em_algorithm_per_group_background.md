@@ -1,8 +1,8 @@
 # EM Algorithm with Group-Specific Background
 
-## MHC-I
+## MHC1
 
-EMMo implements a variant of the MHC-I deconvolution algorithm, that uses group-specific background
+EMMo implements a variant of the MHC1 deconvolution algorithm, that uses group-specific background
 frequencies. A possible application of this variant is the removal of the peptide-MHC binding signal
 in order to deconvolute other signals, e.g., from TCR binding in data from multimer assays. In such
 a scenario, a position probability matrix (PPM) could be provided for each group (=allele) which is
@@ -10,7 +10,7 @@ then used as background during the EM algorithm.
 
 ### Log Likelihood Function
 
-Like the standard MHC-I deconvolution, the method takes as input a list of $N$ peptides (**currently
+Like the standard MHC1 deconvolution, the method takes as input a list of $N$ peptides (**currently
 only 9-mers are supported**) and (a range of) the number $K$ of classes, which correspond to the
 motifs/specificities that are expected to be contained in the list. Additionally, a PPM $b$
 containing the background frequencies must be provided for each group.

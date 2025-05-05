@@ -1,7 +1,7 @@
-# MHC-II Binding Prediction
+# MHC2 Binding Prediction
 
-There are multiple commands related to MHC-II deconvolution. For an explanation how the standard
-MHC2 predictor works, see [this page](../explanations/prediction_mhc2.md).
+There are multiple commands related to MHC2 deconvolution. For an explanation how the standard MHC2
+predictor works, see [this page](../explanations/prediction_mhc2.md).
 
 ## Prediction with Available Models
 

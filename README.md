@@ -33,9 +33,9 @@ entrypoint is the file [emmo/main.py](emmo/main.py).
 
 If you want to learn more about the implemented deconvolution and prediction methods, check out the
 explanations for the
-[MHC-II expectation-maximization algorithm](https://instadeep.gitlab.io/emmo/explanations/em_algorithm.html)
+[MHC2 expectation-maximization algorithm](https://instadeep.gitlab.io/emmo/explanations/em_algorithm.html)
 and the
-[MHC-II binding predictors](https://instadeep.gitlab.io/emmo/explanations/prediction_mhc2.html).
+[MHC2 binding predictors](https://instadeep.gitlab.io/emmo/explanations/prediction_mhc2.html).
 
 For additional documentation (usage and explanations) you can check the
 [project's documentation](https://instadeep.gitlab.io/emmo/). To contribute to this repository,
