@@ -74,7 +74,7 @@ nav:
       - Overview: index.md
       - installation.md
       - CONTRIBUTING.md
-  - Usage:
+  - General Usage:
       - As a Command-line Tool:
           - Overview: usage/cli.md
           - usage/cli_deconvolution.md
@@ -86,7 +86,10 @@ nav:
           - explanations/em_algorithm_per_group_background.md
       - explanations/prediction_mhc2.md
       - explanations/panallelic_prediction.md
-      - explanations/remote_files.md
+  - How-to Guides:
+      - Overview: how_to/index.md
+      - how_to/contaminants.md
+      - how_to/remote_files.md
   - Models:
       - General: models/general.md
       - 2020: models/2020.md

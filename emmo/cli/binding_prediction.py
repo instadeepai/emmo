@@ -18,7 +18,7 @@ from emmo.io.file import save_csv
 from emmo.models.deconvolution import DeconvolutionModelMHC2
 from emmo.models.prediction import PredictorMHC2
 from emmo.pipeline.background import Background
-from emmo.pipeline.model_selection import select_decovolution_models
+from emmo.pipeline.model_selection import select_deconvolution_models
 from emmo.pipeline.model_selection import SelectedModel
 from emmo.utils import logger
 from emmo.utils.click import arguments
@@ -221,7 +221,7 @@ def compile_predictor_mhc2(
 
     # select the model either through the selection file or by using the default trained using only
     # one class
-    selected_models = select_decovolution_models(input_directory, selection_path)
+    selected_models = select_deconvolution_models(input_directory, selection_path)
 
     # try to load the amino acid background distribution
     background_path = input_directory / "background.json"
@@ -317,7 +317,7 @@ def predict_from_deconvolution_models_mhc2(
 
     # select the model either through the selection file or by using the default trained using only
     # one class
-    selected_models = select_decovolution_models(models_directory, selection_path)
+    selected_models = select_deconvolution_models(models_directory, selection_path)
 
     for selection in selected_models.values():
         selection["model"] = DeconvolutionModelMHC2.load(selection["model_path"])

@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any
 from typing import TypedDict
 
+from cloudpathlib import AnyPath
 from cloudpathlib import CloudPath
 
+from emmo.io.file import load_csv
 from emmo.io.file import load_yml
 from emmo.io.file import Openable
 from emmo.io.output import find_deconvolution_results
@@ -33,7 +35,46 @@ class SelectedModel(TypedDict, total=False):
     motif_weight: float
 
 
-def select_decovolution_models(
+def get_best_run_details(
+    model_path: Openable,
+    score_column: str | None = None,
+) -> dict[str, int | float]:
+    """Get the details of the best run of a model.
+
+    Parses the `runs.csv` file of a model and returns the details of the best run.
+
+    Args:
+        model_path: Path to the model directory.
+        score_column: Name of the column to use for selecting the best run. If None, the column
+            'log_likelihood' is used for MHC1 models and 'score' for MHC2 models.
+
+    Returns:
+        Dictionary with the details of the best run.
+    """
+    path_runs = AnyPath(model_path) / "runs.csv"
+    df_runs = load_csv(path_runs)
+
+    if score_column is None:
+        # both MHC1 and MHC2 deconvolution models have a column "log_likelihood", MHC2 models also
+        # have a column "score", which is used for MHC2 model selection
+        score_column = "score" if "score" in df_runs.columns else "log_likelihood"
+    elif score_column not in df_runs.columns:
+        raise ValueError(f"Column '{score_column}' not found in {path_runs}")
+
+    best_run = df_runs.loc[df_runs[score_column].idxmax()]
+
+    run_details: dict[str, int | float] = {"run": int(best_run.name) + 1}
+
+    for col in df_runs.columns:
+        if df_runs[col].dtype == "int64":
+            run_details[col] = int(best_run[col])
+        else:
+            run_details[col] = float(best_run[col])
+
+    return run_details
+
+
+def select_deconvolution_models(
     models_directory: Path | CloudPath,
     selection_path: Path | CloudPath | None,
 ) -> dict[str, SelectedModel]:

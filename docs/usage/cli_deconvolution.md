@@ -98,7 +98,7 @@ For each class, the following plots are available:
 relevant parts that belong to the respective class, whereas the full bars (darker and lighter parts)
 show the cumulated weights and length distribution across all classes (incl. the flat motif).
 
-## Deconvolution for MHC-II Cleavage Model
+## Deconvolution for MHC2 Cleavage Model
 
 The command `deconvolute-for-cleavage-mhc2` runs the deconvolution and model compilation for the
 "cleavage score", which uses short motifs (PPMs) derived from the N- and C-termini of peptides, see

@@ -1,6 +1,6 @@
-# Binding and Binding Core Prediction (MHC-II)
+# Binding and Binding Core Prediction (MHC2)
 
-EMMo implements an MHC-II binding prediction method that is similar to MixMHC2pred (version 1.0 to
+EMMo implements an MHC2 binding prediction method that is similar to MixMHC2pred (version 1.0 to
 1.2), which builds upon EM-based motif deconvolution
 [(Racle et al., 2019)](https://www.nature.com/articles/s41587-019-0289-6).
 

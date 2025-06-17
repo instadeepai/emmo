@@ -14,7 +14,7 @@ d(A,B) = 1  - \frac{s(A,B)}{\sqrt{s(A, A)\cdot s(B, B)}}
 $$
 
 Here, $A$ and $B$ are the pseudosequences of two alleles (where $\alpha$ and $\beta$ chain are
-concatenated in case of MHC-II) and $s(S_1, S_2)$ is the BLOSUM62 score for two aligned amino acid
+concatenated in case of MHC2) and $s(S_1, S_2)$ is the BLOSUM62 score for two aligned amino acid
 sequences $S_1$ and $S_2$.
 
 MixMHC2pred 2.0 [Racle et al. (2023)](https://doi.org/10.1016/j.immuni.2023.03.009) uses an
