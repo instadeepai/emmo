@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from typing import TypedDict
 
+import numpy as np
 from cloudpathlib import AnyPath
 from cloudpathlib import CloudPath
 
@@ -18,6 +19,8 @@ from emmo.io.file import load_yml
 from emmo.io.file import Openable
 from emmo.io.output import find_deconvolution_results
 from emmo.models.deconvolution import DeconvolutionModel
+from emmo.models.deconvolution import DeconvolutionModelMHC1
+from emmo.models.deconvolution import DeconvolutionModelMHC2
 from emmo.utils import logger
 
 log = logger.get(__name__)
@@ -118,6 +121,48 @@ def select_deconvolution_models(
     log.info(f"Selected models for {len(selected_models)} alleles/groups")
 
     return selected_models
+
+
+def load_selected_ppms(
+    models_directory: Path | CloudPath,
+    selection_path: Path | CloudPath | None,
+    mhc_class: int,
+) -> dict[str, np.ndarray]:
+    """Load the selected reference PPMs from the deconvolution models.
+
+    This function is similar to `select_deconvolution_models`, but it directly returns a dictionary
+    mapping groups/alleles to the corresponding selected position probability matrices (PPMs).
+
+    Args:
+        models_directory: Path to the local or remote directory containing the deconvolution models.
+        selection_path: Path to the local or remote YAML file containing the models and motifs to
+            be selected.
+        mhc_class: MHC class for which to load the PPMs (1 or 2).
+
+    Returns:
+        A dictionary mapping groups/alleles to their corresponding selected PPMs.
+
+    Raises:
+        ValueError: If 'mhc_class' is not 1 or 2.
+    """
+    if mhc_class not in (1, 2):
+        raise ValueError("'mhc_class' must be either 1 or 2")
+
+    selected_models = select_deconvolution_models(models_directory, selection_path)
+
+    group2ppm: dict[str, np.ndarray] = {}
+    for group, selected_model in selected_models.items():
+        model: DeconvolutionModel
+
+        if mhc_class == 1:
+            model = DeconvolutionModelMHC1.load(selected_model["model_path"])
+        else:
+            model = DeconvolutionModelMHC2.load(selected_model["model_path"])
+
+        ppm = model.ppm[selected_model["motif"] - 1]
+        group2ppm[group] = ppm
+
+    return group2ppm
 
 
 def _convert_to_int(value: Any) -> int:

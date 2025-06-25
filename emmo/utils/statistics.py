@@ -36,6 +36,21 @@ def kullback_leibler_divergence(a: np.ndarray, b: np.ndarray) -> float:
     return np.sum(a * np.log2(a / b))
 
 
+def symmetrized_kullback_leibler_divergence(p: np.ndarray, q: np.ndarray) -> float:
+    """Symmetrized Kullback-Leibler divergence between two distributions p and q.
+
+    This is defined as: D_KL(p || q) + D_KL(q || p) where D_KL is the Kullback-Leibler divergence.
+
+    Args:
+        p: First probability distribution.
+        q: Second probability distribution.
+
+    Returns:
+        Symmetrized Kullback-Leibler divergence.
+    """
+    return kullback_leibler_divergence(p, q) + kullback_leibler_divergence(q, p)
+
+
 def euclidean_distance(a: np.ndarray, b: np.ndarray) -> float:
     """Average euclidean distance of two arrays.
 
