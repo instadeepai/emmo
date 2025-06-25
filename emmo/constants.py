@@ -10,6 +10,9 @@ GS_BUCKET_PREFIX = "gs://"
 S3_BUCKET_PREFIX = "s3://"
 BUCKET_PREFIXES = (GS_BUCKET_PREFIX, S3_BUCKET_PREFIX)
 
+# small positive value to avoid division by zero
+EPSILON = 1e-8
+
 NATURAL_AAS: tuple[str, ...] = (
     "A",
     "C",

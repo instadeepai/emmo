@@ -104,3 +104,23 @@ def parse_mhc2_allele_pair(allele_pair: str) -> tuple[str, str]:
         return allele2, allele1
     else:
         raise ValueError(f"could not identify alpha and beta chain in '{allele_pair}'")
+
+
+def split_and_shorten_alleles(alleles: str) -> list[str]:
+    """Split a string of alleles and shorten them to compact format.
+
+    Args:
+        alleles: String of alleles, e.g. 'A*01:01; B*07:02; C*07:01'.
+
+    Returns:
+        List of alleles in compact format, e.g. ['A0101', 'B0702', 'C0701'].
+    """
+    alleles = (
+        alleles.replace(";", ",")
+        .replace(" ", "")
+        .replace("HLA-", "")
+        .replace("*", "")
+        .replace(":", "")
+    )
+
+    return alleles.split(",")

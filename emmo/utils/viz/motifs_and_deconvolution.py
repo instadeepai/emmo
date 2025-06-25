@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from cloudpathlib import AnyPath
-from matplotlib.axes._axes import Axes
+from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from emmo.constants import NATURAL_AAS
@@ -26,16 +26,15 @@ from emmo.pipeline.background import BackgroundType
 from emmo.utils import logger
 from emmo.utils.alleles import parse_mhc1_allele_pair
 from emmo.utils.alleles import parse_mhc2_allele_pair
+from emmo.utils.viz.common import COLOR_ALT
+from emmo.utils.viz.common import COLOR_ALT_LIGHT
+from emmo.utils.viz.common import COLOR_DEFAULT
+from emmo.utils.viz.common import COLOR_DEFAULT_LIGHT
+from emmo.utils.viz.common import LOGO_PROPS
 from emmo.utils.viz.common import save_plot
+from emmo.utils.viz.common import unify_ylim
 
 log = logger.get(__name__)
-
-
-LOGO_PROPS = {"fade_below": 0.5, "shade_below": 0.5}
-COLOR_DEFAULT = "royalblue"
-COLOR_DEFAULT_LIGHT = "skyblue"
-COLOR_ALT = "sienna"
-COLOR_ALT_LIGHT = "bisque"
 
 
 def plot_single_ppm(
@@ -151,7 +150,7 @@ def plot_cleavage_model(model: CleavageModel, save_as: Openable | None = None) -
                 f"{name}\nmotif {j+1} of {number_of_classes} (weight {cum_class_weights[j]:.3f})"
             )
 
-    _unify_ylim(axs)
+    unify_ylim(axs)
     plt.tight_layout()
 
     if save_as is not None:
@@ -332,39 +331,18 @@ def _plot_motifs_and_length_distribution_per_group_single_page(
         group = str(row.group)
         log.info(f"Plotting gene {gene}, page {page}, group {i+1}/{num_of_groups} ({group})")
 
-        model_path = AnyPath(row.model_path)
-        model: DeconvolutionModel
-
-        if mhc_class == 1:
-            model = DeconvolutionModelMHC1.load(model_path)
-            if background is None:
-                background = Background("uniprot")
-                log.info(
-                    "No background frequencies provided for plotting MHC1 models; using default "
-                    "(uniprot)"
-                )
-        else:
-            model = DeconvolutionModelMHC2.load(model_path)
-            if background is None:
-                background = model.background
-
-        if model.number_of_classes != number_of_classes:
-            raise ValueError(
-                f"number of classes in model {row.model_path} does not match, should be "
-                f"{number_of_classes}, got {model.number_of_classes}"
-            )
-
-        _plot_model_to_axes(model, group, axs[i, :-2:3], background)
-        _plot_class_weights_to_axes(model, group, list(axs[i, 1:-2:3]) + [axs[i, -2]])
-        _plot_length_distribution_from_responsibilities(
-            model,
-            load_csv(model_path / "responsibilities.csv"),
-            group,
-            list(axs[i, 2:-2:3]) + [axs[i, -1]],
-            include_flat=True,
+        _plot_deconvolution_run_to_axes(
+            mhc_class=mhc_class,
+            title=group,
+            model_path=AnyPath(row.model_path),
+            background=background,
+            axs_motifs=axs[i, :-2:3],
+            axs_weights=list(axs[i, 1:-2:3]) + [axs[i, -2]],
+            axs_length=list(axs[i, 2:-2:3]) + [axs[i, -1]],
+            expected_number_of_classes=number_of_classes,
         )
 
-    _unify_ylim(axs[:, :-2:3])
+    unify_ylim(axs[:, :-2:3])
     fig.tight_layout()
 
     return fig
@@ -410,24 +388,11 @@ def plot_predictor_mhc2(predictor: PredictorMHC2, output_directory: Openable) ->
                 )
             ax.set_title(title)
 
-        _unify_ylim(axs)
+        unify_ylim(axs)
         plt.tight_layout()
 
         file_path = output_directory / f"motifs_{gene}.pdf"
         save_plot(file_path)
-
-
-def _unify_ylim(axs: np.ndarray[Axes]) -> None:
-    """Unify the the ylim of Axes objects to the minimum and maximum.
-
-    Args:
-        axs: Array of Axes instances.
-    """
-    axs = axs.flatten()
-    min_ylim = min(ax.get_ylim()[0] for ax in axs)
-    max_ylim = max(ax.get_ylim()[1] for ax in axs)
-    for ax in axs:
-        ax.set_ylim(min_ylim, max_ylim)
 
 
 def _get_weights_per_motif(model: DeconvolutionModel) -> np.ndarray | None:
@@ -448,6 +413,70 @@ def _get_weights_per_motif(model: DeconvolutionModel) -> np.ndarray | None:
         return np.sum(model.class_weights, axis=1)
     else:
         raise ValueError(f"unsupported model type: {type(model)}")
+
+
+def _plot_deconvolution_run_to_axes(
+    mhc_class: int,
+    title: str,
+    model_path: Openable,
+    background: BackgroundType | None,
+    axs_motifs: np.ndarray[Axes] | list[Axes],
+    axs_weights: np.ndarray[Axes] | list[Axes],
+    axs_length: np.ndarray[Axes] | list[Axes],
+    expected_number_of_classes: int | None = None,
+) -> None:
+    """Plot the motifs, weights, and length distributions of a deconvolution run.
+
+    Args:
+        mhc_class: The MHC class (1 or 2).
+        title: The title for the plot.
+        model_path: Path to the fitted deconvolution model.
+        background: Background frequencies to use. If None, the uniprot background (MHC1) or the
+            background of the model (MHC2) is used.
+        axs_motifs: Axes instance(s) used for plotting motifs.
+        axs_weights: Axes instance(s) used for plotting class weights.
+        axs_length: Axes instance(s) used for plotting length distributions.
+        expected_number_of_classes: Expected number of classes in the model. If provided, this is
+            checked against the actual number of classes in the model.
+
+    Raises:
+        ValueError: If the number of classes in the model does not match the expected number of
+            classes.
+    """
+    model_path = AnyPath(model_path)
+    model: DeconvolutionModel
+
+    if mhc_class == 1:
+        model = DeconvolutionModelMHC1.load(model_path)
+        if background is None:
+            background = Background("uniprot")
+            log.info(
+                "No background frequencies provided for plotting MHC1 models; using default "
+                "(uniprot)"
+            )
+    else:
+        model = DeconvolutionModelMHC2.load(model_path)
+        if background is None:
+            background = model.background
+
+    if (
+        expected_number_of_classes is not None
+        and model.number_of_classes != expected_number_of_classes
+    ):
+        raise ValueError(
+            f"number of classes in model {model_path} does not match, should be "
+            f"{expected_number_of_classes}, got {model.number_of_classes}"
+        )
+
+    _plot_model_to_axes(model, title, axs_motifs, background)
+    _plot_class_weights_to_axes(model, title, axs_weights)
+    _plot_length_distribution_from_responsibilities(
+        model,
+        load_csv(model_path / "responsibilities.csv"),
+        title,
+        axs_length,
+        include_flat=True,
+    )
 
 
 def _plot_model_to_axes(
