@@ -679,14 +679,15 @@ class MotifComparisonPlotter:
 
     def plot(
         self,
-        group: str,
+        group: str | list[str],
         save_as: Openable | None = None,
         disable_display: bool = False,
     ) -> None:
         """Plot the deconvoluted motifs and the closest matching reference motifs.
 
         Args:
-            group: The identifier of the group to plot (e.g., an experiment ID).
+            group: The identifier of the group to plot (e.g., an experiment ID). A list of groups
+                can also be provided, in which case the groups are plotted as pages of a PDF file.
             save_as: Optional file path to save the plot. If None, the plot is not saved.
             disable_display: If True (and `save_as` is provided), the plot is not displayed
                 interactively.
@@ -702,6 +703,102 @@ class MotifComparisonPlotter:
                 "If 'disable_display' is True, 'save_as' must be provided to save the plot."
             )
 
+        groups = group if isinstance(group, list) else [group]
+
+        figures: list[Figure] = []
+
+        for i, this_group in enumerate(groups):
+            if isinstance(group, list):
+                log.info(f"Plotting page {i + 1} of {len(groups)} ('{this_group}') ...")
+
+            figures.append(self._plot(this_group))
+
+        if save_as is not None:
+            save_plot(save_as, figures=figures, close_figures=disable_display)
+
+    def _filter_by_group(self, group: str) -> pd.DataFrame:
+        """Filter the DataFrame by the group identifier.
+
+        Args:
+            group: The identifier of the group to filter by (e.g., an experiment ID).
+
+        Returns:
+            Filtered DataFrame containing only the rows for the specified group.
+
+        Raises:
+            ValueError: If the group identifier is not found in the DataFrame or if there are
+                inconsistencies in the number of classes, classes indexes, or model paths.
+        """
+        df_filtered = (
+            self.df_distances[self.df_distances["group"] == group]
+            .sort_values("number_of_classes", ascending=True)
+            .reset_index(drop=True)
+        )
+
+        if df_filtered.empty:
+            raise ValueError(f"Identifier '{group}' not found in the DataFrame")
+
+        # check that the number of classes are consistent
+        number_of_classes = len(df_filtered)
+        if [number_of_classes] != df_filtered["number_of_classes"].unique().tolist():
+            raise ValueError(
+                f"Expected {number_of_classes} classes, but found "
+                f"{df_filtered['number_of_classes'].unique().tolist()}."
+            )
+
+        # check that the classes are in the expected range
+        if df_filtered["class"].tolist() != list(range(1, number_of_classes + 1)):
+            raise ValueError(
+                f"Expected classes to be {list(range(1, number_of_classes + 1))}, "
+                f"but found {df_filtered['class'].tolist()}."
+            )
+
+        # check that the model path is consistent
+        model_paths = df_filtered["model_path"].unique()
+        if len(model_paths) != 1:
+            raise ValueError(
+                f"Expected exactly one model path, but found {len(model_paths)} different ones"
+            )
+
+        return df_filtered
+
+    def _map_alleles_to_nearest_reference(self) -> dict[str, tuple[list[str], float]]:
+        """Map allele that are missing in the reference to the nearest reference allele.
+
+        Returns:
+            Dictionary mapping alleles that are not in the reference to the nearest reference allele
+            and the distance to it.
+        """
+        all_alleles = set(self.df_distances["best_matching_allele_genotype"].unique()) | set(
+            self.df_distances["best_matching_allele_overall"].unique()
+        )
+
+        if self.allele_column is not None:
+            all_alleles = all_alleles.union(
+                self.df_distances[self.allele_column]
+                .apply(split_and_shorten_alleles)
+                .explode()
+                .unique()
+            )
+
+        reference_alleles = sorted(self.allele2reference_motif.keys())
+        unavailable_alleles = sorted(all_alleles.difference(reference_alleles))
+
+        return nearest_neighbors(
+            available_alleles=reference_alleles,
+            unavailable_alleles=unavailable_alleles,
+            mhc_class=self.mhc_class,
+        )
+
+    def _plot(self, group: str) -> Figure:
+        """Plot the deconvoluted motifs and the closest matching reference motifs for a group.
+
+        Args:
+            group: The identifier of the group to plot (e.g., an experiment ID).
+
+        Returns:
+            The matplotlib Figure object containing the plot.
+        """
         df_filtered = self._filter_by_group(group)
         number_of_classes = df_filtered["number_of_classes"].iloc[0]
         model_path = str(df_filtered["model_path"].iloc[0])
@@ -763,82 +860,7 @@ class MotifComparisonPlotter:
             if is_axes_empty(ax):
                 ax.set_visible(False)
 
-        if save_as is not None:
-            save_plot(save_as, close_figures=disable_display)
-
-    def _filter_by_group(self, group: str) -> pd.DataFrame:
-        """Filter the DataFrame by the group identifier.
-
-        Args:
-            group: The identifier of the group to filter by (e.g., an experiment ID).
-
-        Returns:
-            Filtered DataFrame containing only the rows for the specified group.
-
-        Raises:
-            ValueError: If the group identifier is not found in the DataFrame or if there are
-                inconsistencies in the number of classes, classes indexes, or model paths.
-        """
-        df_filtered = (
-            self.df_distances[self.df_distances["group"] == group]
-            .sort_values("number_of_classes", ascending=True)
-            .reset_index(drop=True)
-        )
-
-        if df_filtered.empty:
-            raise ValueError(f"Identifier '{group}' not found in the DataFrame")
-
-        # check that the number of classes are consistent
-        number_of_classes = len(df_filtered)
-        if [number_of_classes] != df_filtered["number_of_classes"].unique().tolist():
-            raise ValueError(
-                f"Expected {number_of_classes} classes, but found "
-                f"{df_filtered['number_of_classes'].unique().tolist()}."
-            )
-
-        # check that the classes are in the expected range
-        if df_filtered["class"].tolist() != list(range(1, number_of_classes + 1)):
-            raise ValueError(
-                f"Expected classes to be {list(range(1, number_of_classes + 1))}, "
-                f"but found {df_filtered['class'].tolist()}."
-            )
-
-        # check that the model path is consistent
-        model_paths = df_filtered["model_path"].unique()
-        if len(model_paths) != 1:
-            raise ValueError(
-                f"Expected exactly one model path, but found {len(model_paths)} different ones"
-            )
-
-        return df_filtered
-
-    def _map_alleles_to_nearest_reference(self) -> dict[str, tuple[list[str], float]]:
-        """Map allele that are missing in the reference to the nearest reference allele.
-
-        Returns:
-            Dictionary mapping alleles that are not in the reference to the nearest reference allele
-            and the distance to it.
-        """
-        all_alleles = set(self.df_distances["best_matching_allele_genotype"].unique()) | set(
-            self.df_distances["best_matching_allele_overall"].unique()
-        )
-
-        if self.allele_column is not None:
-            all_alleles.union(
-                self.df_distances[self.allele_column]
-                .apply(split_and_shorten_alleles)
-                .explode()
-                .unique()
-            )
-
-        reference_alleles = sorted(self.allele2reference_motif.keys())
-        unavailable_alleles = sorted(all_alleles.difference(reference_alleles))
-
-        return nearest_neighbors(
-            available_alleles=reference_alleles,
-            unavailable_alleles=unavailable_alleles,
-            mhc_class=self.mhc_class,
-        )
+        return fig
 
     def _plot_deconvolution_run_and_matched_motifs(
         self,
