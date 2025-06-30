@@ -88,7 +88,12 @@ nav:
       - explanations/panallelic_prediction.md
   - How-to Guides:
       - Overview: how_to/index.md
-      - how_to/contaminants.md
+      - how_to/reference_motifs.md
+      - Identification of Contaminants:
+          - Overview: how_to/contaminants/index.md
+          - how_to/contaminants/mhc1_in_mhc2_ligandomics_data.md
+          - how_to/contaminants/peptides_from_unexpected_alleles.md
+          - how_to/contaminants/mhc_allele_misannotations.md
       - how_to/remote_files.md
   - Models:
       - General: models/general.md
