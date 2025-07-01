@@ -48,6 +48,8 @@ def symmetrized_kullback_leibler_divergence(p: np.ndarray, q: np.ndarray) -> flo
     """Symmetrized Kullback-Leibler divergence between two distributions p and q.
 
     This is defined as: D_KL(p || q) + D_KL(q || p) where D_KL is the Kullback-Leibler divergence.
+    In case of sequence motifs (represented as position probability matrices), the function returns
+    the sum of the symmetrized KL divergence values over all positions.
 
     Args:
         p: First probability distribution.
@@ -60,6 +62,36 @@ def symmetrized_kullback_leibler_divergence(p: np.ndarray, q: np.ndarray) -> flo
     q = _ensure_positive_values(q)
 
     return kullback_leibler_divergence(p, q) + kullback_leibler_divergence(q, p)
+
+
+def jensen_shannon_divergence(p: np.ndarray, q: np.ndarray) -> float:
+    """Jensen-Shannon divergence between two distributions p and q.
+
+    This is defined as the average of the Kullback-Leibler divergence of p and q with respect to
+    their average distribution:
+    D_JS(p || q) = 0.5 * (D_KL(p || m) + D_KL(q || m)), where m = 0.5 * (p + q).
+    In case of sequence motifs (represented as position probability matrices), the function returns
+    the sum of the JS divergence values over all positions.
+
+    References:
+        [1] Jianhua Lin. Divergence measures based on the Shannon entropy. IEEE Transactions on
+            Information Theory, 37(1):145-151 (1991). doi:10.1109/18.61115
+        [2] Martin Nettling, Hendrik Treutler, Jan Grau, Jens Keilwagen, Stefan Posch, Ivo Grosse.
+            DiffLogo: a comparative visualization of sequence motifs.
+            BMC Bioinformatics 16, 387 (2015). doi:10.1186/s12859-015-0767-x
+
+    Args:
+        p: First probability distribution.
+        q: Second probability distribution.
+
+    Returns:
+        Jensen-Shannon divergence.
+    """
+    p = _ensure_positive_values(p)
+    q = _ensure_positive_values(q)
+
+    m = 0.5 * (p + q)
+    return 0.5 * (kullback_leibler_divergence(p, m) + kullback_leibler_divergence(q, m))
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray) -> float:

@@ -157,9 +157,9 @@ class MotifDistancePlotter:
     def plot(self) -> Figure:
         """Plot the motif distances.
 
-        Plots the symmetrized Kullback-Leibler divergence to the best reference motifs (in the
-        genotype vs overall as paired boxplot), and optionally the hit counts and the alleles
-        present in the genotype.
+        Plots the Jensen-Shannon divergence to the best reference motifs (in the genotype vs
+        overall as paired boxplot), and optionally the hit counts and the alleles present in the
+        genotype.
 
         Returns:
             The matplotlib Figure object containing the plot.
@@ -311,7 +311,7 @@ class MotifDistancePlotter:
         return df_melted
 
     def _plot_motif_distances(self, ax: plt.Axes) -> None:
-        """Plot the symmetrized Kullback-Leibler divergence to the best reference motifs.
+        """Plot the Jensen-Shannon divergence to the best reference motifs.
 
         This produces one boxplot per group with the distances to the best matching reference motifs
         among the available alleles in the dataset. The boxplots are grouped by the matching type,
@@ -361,7 +361,7 @@ class MotifDistancePlotter:
 
         ax.tick_params(axis="x", labelrotation=90)
         ax.set_xlabel("")
-        ax.set_ylabel("Symmetrized KL Divergence to best allele")
+        ax.set_ylabel("JS divergence to best allele")
         ax.legend(loc="upper left", bbox_to_anchor=(1.005, 1.0), ncol=1).set_title(None)
 
     def _set_x_axis_labels(self, ax: plt.Axes) -> None:
@@ -900,7 +900,7 @@ class MotifComparisonPlotter:
 
                 if allele in self.allele2reference_motif:
                     ref_allele = allele
-                    title = f"Closest motif {suffix}: {allele}\nSymm. KL divergence: {distance:.3f}"
+                    title = f"Closest motif {suffix}: {allele}\nJS divergence: {distance:.3f}"
                 else:
                     nearest_reference_alleles = self._allele2nearest_reference_allele[allele][0]
 
@@ -911,7 +911,7 @@ class MotifComparisonPlotter:
                     alleles_str = ", ".join(nearest_reference_alleles)
                     title = (
                         f"Closest motif {suffix}: {allele} (nearest ref.: {alleles_str})\n"
-                        f"Symm. KL divergence: {distance:.3f}"
+                        f"JS divergence: {distance:.3f}"
                     )
 
                 ppm = self.allele2reference_motif[ref_allele]
@@ -1073,11 +1073,11 @@ def _plot_group_motif_distances(
     num_groups = len(unique_groups)
 
     # determine the maximum y-axis limits for synchronizing across all pages
-    max_kl_distance = max(
+    max_distance = max(
         df_distances["best_matching_distance_genotype"].max(),
         df_distances["best_matching_distance_overall"].max(),
     )
-    ylim_distances = max_kl_distance * 1.03
+    ylim_distances = max_distance * 1.03
     if df_hit_counts is not None:
         max_hit_count = df_hit_counts["num_of_hits_total"].max()
         ylim_hit_counts = max_hit_count * 1.03

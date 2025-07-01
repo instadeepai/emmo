@@ -21,7 +21,7 @@ from emmo.pipeline.model_selection import load_selected_ppms
 from emmo.utils import logger
 from emmo.utils.alleles import split_and_shorten_alleles
 from emmo.utils.sequence_distance import nearest_neighbors
-from emmo.utils.statistics import symmetrized_kullback_leibler_divergence
+from emmo.utils.statistics import jensen_shannon_divergence
 
 log = logger.get(__name__)
 
@@ -238,7 +238,7 @@ def _assign_best_matching_motifs(
 ) -> list[dict[str, Any]]:
     """Assign the best matching motifs for a given deconvolution model.
 
-    This function computes the Kullback-Leibler divergence between the PPMs of the deconvolution
+    This function computes the Jensen-Shannon divergence between the PPMs of the deconvolution
     model and the reference PPMs. It returns a list of dictionaries containing the best matching
     alleles and their distances for each class/cluster in the deconvolution model.
     Two types of best matching alleles are returned:
@@ -269,7 +269,7 @@ def _assign_best_matching_motifs(
         ppm = model.ppm[c]
 
         kl_distances = {
-            ref_allele: symmetrized_kullback_leibler_divergence(ppm, ref_ppm)
+            ref_allele: jensen_shannon_divergence(ppm, ref_ppm)
             for ref_allele, ref_ppm in allele2ppm.items()
         }
 

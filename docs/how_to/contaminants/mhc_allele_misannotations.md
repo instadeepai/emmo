@@ -13,25 +13,36 @@ the deconvoluted motifs to a set of curated reference motifs.
 
 ### Motif similarity
 
-A motif in EMMo is typically represented by a position probability matrix (PPM). A PPM has a set $X$
-of entries where $|X|= L \cdot |A|$ with $L$ being the motif length and $A$ the alphabet (here,
-typically, the set of amino acids). The Kullback-Leibler (KL) divergence can be used to compare two
-PPMs.
+A motif in EMMo is typically represented by a position probability matrix (PPM). A PPM is an
+$L \times |A|$ matrix where $L$ is the motif length and $A$ is the alphabet (here, typically, the
+set of amino acids). Following [Nettling et al. (2015)](https://doi.org/10.1186/s12859-015-0767-x),
+we use the Jensen-Shannon (JS) divergence to compare two PPMs.
 
-In general, the KL divergence is a type of statistical distance: a measure of how much a model
-probability distribution $Q$ is different from a true probability distribution $P$. Mathematically,
-it is defined as:
-
-$$
-D_{\textrm{KL}}(P\; ||\; Q) = \sum_{x \in X} P(x)\; \log \frac{P(x)}{Q(x)}.
-$$
-
-The KL divergence is not symmetric, i.e.,
-$D_{\textrm{KL}}(P\; ||\; Q) = D_{\textrm{KL}}(Q\; ||\; P)$ does not hold in general. We therefore
-use the symmetrized KL divergence:
+The JS divergence is a method of measuring the similarity between two probability distributions. It
+is a symmetrized and smoothed version of the Kullback–Leibler (KL) divergence. The JS divergence of
+two motifs $p$ and $q$ at position $\ell$ is given by
 
 $$
-D_{\textrm{KL}}(P\; ||\; Q) + D_{\textrm{KL}}(Q\; ||\; P).
+H_{\ell}
+\; = \;
+\frac{1}{2} \sum_{a \in A} p_{\ell, a}\; \log \frac{p_{\ell, a}}{m_{\ell, a}}
+\; + \;
+\frac{1}{2} \sum_{a \in A} q_{\ell, a}\; \log \frac{q_{\ell, a}}{m_{\ell, a}}
+$$
+
+where
+
+$$
+m_{\ell, a} = \frac{p_{\ell, a} + q_{\ell, a}}{2}
+$$
+
+is a mixture distribution of $p$ and $q$.
+
+We define a scalar dissimilarity value $D$ for a pair of motifs as the sum of the JS divergence over
+all positions:
+
+$$
+D = \sum_{\ell = 1}^{L} H_{\ell}.
 $$
 
 ### Motif comparison
@@ -58,8 +69,8 @@ alleles:
 In option 1, if a given allele is not available in the set of reference alleles, the closest
 available allele in terms of a BLOSUM-based distance of the pseudosequences is used instead.
 
-This approach results in $2 \times K$ distance values (symm. KL divergence) for each experiment,
-which can be plotted using functions implemented in EMMo (see examples below).
+This approach results in $2 \times K$ distance values (JS divergence) for each experiment, which can
+be plotted using functions implemented in EMMo (see examples below).
 
 ## Usage in EMMo
 
@@ -68,7 +79,7 @@ which can be plotted using functions implemented in EMMo (see examples below).
 ### Motif matching
 
 As a first step, the best matching alleles and motifs are computed with the corresponding motif
-distances (symm. KL divergence).
+distances (JS divergence).
 
 ```python
 from emmo.dataset_processing.contaminants.motif_matching import match_motifs_to_reference
@@ -100,10 +111,10 @@ The ratio of the number of predicted binders vs. the total number of peptides in
 experiment can also indicate low-quality experiments or experiments with misannotations. Therefore,
 EMMo allows inputting a table `df_hit_counts` with columns:
 
-- `group` - the experiment ID
+- `group` - Experiment ID
 - `num_of_hits_total` - Total number of peptides for the group
 - `num_of_hits_below_threshold` - Number of predicted binders (e.g., peptides that are below a
-  certain percentile rank)
+  certain percentile rank threshold)
 
 Example usage:
 
@@ -139,8 +150,7 @@ plot_group_motif_distances(
 ```
 
 The following is an example plot (first page only) where all possible types of input have been
-provided (i.e., including MHC allele annotation information and total peptide / predicted binder
-counts).
+provided (i.e., including MHC allele annotations and total peptide / predicted binder counts).
 
 <img src="../../media/usage/contaminant-misannotation.png" width="800"/>
 
